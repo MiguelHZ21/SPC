@@ -1016,7 +1016,7 @@ async function answer(i){
     show('#bQContinue');
   }
 }
-$('#bQContinue').onclick=()=>{only(null);if(G.quiz.correct)beginClimb();else beginCrash();};if(G.quiz.correct)beginClimb();else beginCrash();};
+$('#bQContinue').onclick=()=>{only(null);if(G.quiz.correct)beginClimb();else beginCrash();};
 
 /* ------------- Ascenso (acierto) ------------- */
 function beginClimb(){const R=G.R;G.state='climb';R.clT=0;G.timeScale=0.35;impact('¡DESPEGUE!','gold','Proceso estable · rumbo a ±3σ');AudioSys.boomNow();G.shake=0.8;}
@@ -1267,7 +1267,6 @@ function modeBanner(){
     b.className='warn';b.textContent='MODO LOCAL: Sin conexión al servidor central. Los intentos no se registrarán globalmente.';
   }
 }
- else{b.className='warn';b.textContent='MODO LOCAL: no hay conexión con la cuenta de Calidad. Los intentos se guardan solo en este navegador.';}}
 function goMenu(){G.state='menu';G.paused=false;hide('#hud');hide('#bPause');$('#alertFrame').className='';$('#cockpit').classList.remove('on');AudioSys.engine(0,false);
  buildTeamSelect();buildLevels();buildRanking();modeBanner();only('#menu');idleSetup(false);}
 Store.listeners.push(()=>{if(G.state==='menu'){buildTeamSelect();buildLevels();buildRanking();}if(!$('#admin').classList.contains('hidden')&&admOpen)renderAdmin();});

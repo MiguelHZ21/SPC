@@ -205,7 +205,7 @@ content = old_store_pattern.sub(new_store, content)
 print("Replaced Store implementation.")
 
 # 4. Replace openQuestion and answer
-old_quiz_pattern = re.compile(r"function openQuestion\(\)\{.*?function answer\(i\)\{.*?\}\s*\$\('#bQContinue'\)\.onclick=.*?;", re.DOTALL)
+old_quiz_pattern = re.compile(r"function openQuestion\(\)\{.*?/\* ------------- Ascenso \(acierto\) ------------- \*/", re.DOTALL)
 
 new_quiz = """async function openQuestion(){
   G.state='question';G.timeScale=0.06;const lv=curLevel();
@@ -265,9 +265,11 @@ async function answer(i){
     show('#bQContinue');
   }
 }
-$('#bQContinue').onclick=()=>{only(null);if(G.quiz.correct)beginClimb();else beginCrash();};"""
+$('#bQContinue').onclick=()=>{only(null);if(G.quiz.correct)beginClimb();else beginCrash();};
 
-content = old_quiz_pattern.sub(new_quiz, content)
+/* ------------- Ascenso (acierto) ------------- */"""
+
+content = old_quiz_pattern.sub(lambda m: new_quiz, content)
 print("Replaced openQuestion and answer.")
 
 # 5. Replace finishLevel
@@ -461,7 +463,7 @@ content = old_render_adm_pattern.sub(lambda m: new_render_adm, content)
 print("Replaced renderAdmin and sanitized CSV.")
 
 # 10. Update modeBanner
-old_banner_pattern = re.compile(r"function modeBanner\(\)\{.*?\}", re.DOTALL)
+old_banner_pattern = re.compile(r"function modeBanner\(\)\{.*?function goMenu\(\)", re.DOTALL)
 new_banner = """function modeBanner(){
   const b=$('#modeBanner');
   if(Store.mode==='remote'){
@@ -469,7 +471,8 @@ new_banner = """function modeBanner(){
   }else{
     b.className='warn';b.textContent='MODO LOCAL: Sin conexión al servidor central. Los intentos no se registrarán globalmente.';
   }
-}"""
+}
+function goMenu()"""
 content = old_banner_pattern.sub(lambda m: new_banner, content)
 print("Updated modeBanner.")
 
