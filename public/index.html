@@ -1326,13 +1326,24 @@ $('#codeOk').onclick=tryCode;$('#codeIn').addEventListener('keydown',e=>{if(e.ke
 
 /* ------------- Control de Calidad (PIN) ------------- */
 let admOpen=false;
-$('#bAdmin').onclick=()=>{admOpen=false;$('#admPin').value='';$('#admLoginMsg').textContent='';show('#admLogin');hide('#admBody');
- $('#admLoginTxt').textContent=Store.config.pinHash?'Ingresa el PIN de Calidad.':'Primera vez: crea un PIN de 4 a 8 dígitos para proteger este panel.';$('#admPinOk').textContent=Store.config.pinHash?'ENTRAR':'CREAR PIN';show('#admin');setTimeout(()=>$('#admPin').focus(),50);};
+$('#bAdmin').onclick=()=>{
+  admOpen=false;$('#admPin').value='';$('#admLoginMsg').textContent='';
+  show('#admLogin');hide('#admBody');
+  $('#admLoginTxt').textContent='Ingresa el PIN de Calidad para administrar equipos y resultados.';
+  $('#admPinOk').textContent='ENTRAR';
+  show('#admin');setTimeout(()=>$('#admPin').focus(),50);
+};
 $('#admClose').onclick=()=>{hide('#admin');admOpen=false;buildTeamSelect();buildLevels();buildRanking();};
-async function admLogin(){const pin=$('#admPin').value.trim();if(!/^\d{4,8}$/.test(pin)){$('#admLoginMsg').textContent='El PIN debe tener entre 4 y 8 dígitos.';return;}const h=sha256('mbcpin:'+pin);
- if(!Store.config.pinHash){try{await Store.setConfig({pinHash:h});}catch(e){$('#admLoginMsg').textContent='No se pudo guardar el PIN.';return;}}
- else if(Store.config.pinHash!==h){$('#admLoginMsg').textContent='PIN incorrecto.';return;}
- admOpen=true;hide('#admLogin');show('#admBody');renderAdmin();}
+async function admLogin(){
+  const pin=$('#admPin').value.trim();
+  if(!/^\d{4,8}$/.test(pin)){$('#admLoginMsg').textContent='El PIN debe tener entre 4 y 8 dígitos.';return;}
+  try{
+    await Store.adminLogin(pin);
+    admOpen=true;hide('#admLogin');show('#admBody');renderAdmin();
+  }catch(e){
+    $('#admLoginMsg').textContent=e.message||'PIN incorrecto.';
+  }
+}
 $('#admPinOk').onclick=admLogin;$('#admPin').addEventListener('keydown',e=>{if(e.key==='Enter')admLogin();});
 function cellTxt(t,n){if(!isUnlocked(t,n))return'—';const a=att(t,n);if(a.final){return a.final.status==='completado'?a.final.score.toLocaleString('es-CO'):'EC';}if(a.practice)return a.practice.status==='completado'?'P':'EC';return'A';}
 function renderAdmin(){

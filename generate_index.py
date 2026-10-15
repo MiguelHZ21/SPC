@@ -381,7 +381,7 @@ content = old_trycode_pattern.sub(new_trycode, content)
 print("Replaced tryCode.")
 
 # 8. Replace admLogin and admin actions
-old_admin_pattern = re.compile(r"\$\('#bAdmin'\)\.onclick=async?\(\)=>\{.*?function cellTxt", re.DOTALL)
+old_admin_pattern = re.compile(r"\$\('#bAdmin'\)\.onclick=.*?function cellTxt", re.DOTALL)
 
 new_admin = r"""$('#bAdmin').onclick=()=>{
   admOpen=false;$('#admPin').value='';$('#admLoginMsg').textContent='';
