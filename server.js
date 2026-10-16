@@ -120,7 +120,7 @@ if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
 }
 
-let store = { teams: [], config: {} };
+let store = { version: 1, teams: [], config: {} };
 
 function loadStore() {
   try {
@@ -129,12 +129,19 @@ function loadStore() {
       store = JSON.parse(data);
       if (!Array.isArray(store.teams)) store.teams = [];
       if (!store.config) store.config = {};
-    } else {
+      if (typeof store.version !== 'number') store.version = 1;
+    }
+    // Si la lista de equipos está vacía, inicializar con los 12 equipos predeterminados
+    if (store.teams.length === 0) {
+      const seedFile = path.join(DATA_DIR, 'seed_teams.json');
+      if (fs.existsSync(seedFile)) {
+        store.teams = JSON.parse(fs.readFileSync(seedFile, 'utf8'));
+      }
       saveStore();
     }
   } catch (err) {
     console.error('Error al cargar base de datos local:', err);
-    store = { teams: [], config: {} };
+    store = { version: 1, teams: [], config: {} };
   }
 }
 
@@ -144,7 +151,11 @@ function saveStore() {
     fs.writeFileSync(tempFile, JSON.stringify(store, null, 2), 'utf8');
     fs.renameSync(tempFile, STORE_FILE);
   } catch (err) {
-    console.error('Error al guardar base de datos local:', err);
+    try {
+      fs.writeFileSync(STORE_FILE, JSON.stringify(store, null, 2), 'utf8');
+    } catch (e2) {
+      console.error('Error al guardar base de datos local:', e2);
+    }
   }
 }
 
@@ -193,7 +204,103 @@ function authAdmin(req, res, next) {
 
 /* ================= RUTAS DE LA API ================= */
 
-// 1. Estado de salud
+// 0. Verificación de conectividad (requerido por Store.init)
+app.get('/api/ping', (req, res) => {
+  res.json({ ok: true });
+});
+
+// 1. Estado sincronizado completo (versión, equipos, configuración)
+app.get('/api/state', (req, res) => {
+  res.json({
+    version: store.version || 1,
+    teams: store.teams || [],
+    config: store.config || {}
+  });
+});
+
+// 2. Obtener un equipo individual por ID
+app.get('/api/teams/:id', (req, res) => {
+  const team = store.teams.find(t => t.id === req.params.id);
+  if (!team) {
+    return res.status(404).json({ error: 'Equipo no encontrado' });
+  }
+  res.json(team);
+});
+
+// 3. Crear o actualizar equipo por ID (sincronizado con Store.updateTeam / Store.addTeam)
+app.put('/api/teams/:id', (req, res) => {
+  const id = req.params.id;
+  const doc = req.body;
+  if (!doc || typeof doc !== 'object') {
+    return res.status(400).json({ error: 'Cuerpo de petición inválido' });
+  }
+  doc.id = id;
+
+  // Sanitización de textos para prevenir inyecciones y fórmulas
+  if (doc.name) {
+    doc.name = sanitizeForCSV(String(doc.name).slice(0, 50));
+  }
+  if (doc.shift) {
+    doc.shift = sanitizeForCSV(String(doc.shift).slice(0, 50));
+  }
+  if (typeof doc.color !== 'number') {
+    doc.color = 0;
+  }
+
+  // Validación de intentos y puntajes
+  if (doc.attempts && typeof doc.attempts === 'object') {
+    for (const lvl in doc.attempts) {
+      const attObj = doc.attempts[lvl];
+      if (attObj && typeof attObj === 'object') {
+        ['practice', 'practice2', 'final'].forEach(type => {
+          const a = attObj[type];
+          if (a && typeof a === 'object') {
+            if (typeof a.score === 'number') {
+              a.score = Math.max(0, Math.min(5000, Math.round(a.score)));
+            }
+          }
+        });
+      }
+    }
+  }
+  doc.total = calcTotal(doc);
+
+  const idx = store.teams.findIndex(t => t.id === id);
+  if (idx >= 0) {
+    store.teams[idx] = doc;
+  } else {
+    store.teams.push(doc);
+  }
+
+  store.version = (store.version || 1) + 1;
+  saveStore();
+  res.json(doc);
+});
+
+// 4. Eliminar equipo por ID
+app.delete('/api/teams/:id', (req, res) => {
+  const id = req.params.id;
+  const idx = store.teams.findIndex(t => t.id === id);
+  if (idx >= 0) {
+    store.teams.splice(idx, 1);
+    store.version = (store.version || 1) + 1;
+    saveStore();
+  }
+  res.json({ ok: true });
+});
+
+// 5. Actualizar configuración global
+app.put('/api/config', (req, res) => {
+  const patch = req.body;
+  if (patch && typeof patch === 'object') {
+    store.config = Object.assign({}, store.config, patch);
+    store.version = (store.version || 1) + 1;
+    saveStore();
+  }
+  res.json({ ok: true, config: store.config });
+});
+
+// 6. Estado de salud
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', serverTime: new Date().toISOString() });
 });
