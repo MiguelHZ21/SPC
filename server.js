@@ -146,7 +146,7 @@ function loadStore() {
 }
 
 /* ---------- Neon / PostgreSQL (Recomendado en Render) ---------- */
-const DATABASE_URL = process.env.DATABASE_URL || process.env.POSTGRES_URL || process.env.NEON_DATABASE_URL || '';
+const DATABASE_URL = (process.env.DATABASE_URL || process.env.DATABASE_URI || process.env.POSTGRES_URL || process.env.POSTGRESQL_URL || process.env.NEON_DATABASE_URL || process.env.NEON_URL || '').trim();
 let pgPool = null;
 let pgTimer = null;
 let pgPending = false;
@@ -498,9 +498,14 @@ app.put('/api/config', (req, res) => {
   res.json({ ok: true, config: store.config });
 });
 
-// 6. Estado de salud
+// 6. Estado de salud y diagnóstico
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', serverTime: new Date().toISOString() });
+  res.json({
+    status: 'ok',
+    storage: pgPool ? 'Neon PostgreSQL' : (mongoCol ? 'MongoDB Atlas' : 'Archivo local'),
+    databaseUrlFound: !!DATABASE_URL,
+    serverTime: new Date().toISOString()
+  });
 });
 
 // 2. Obtener lista pública de equipos y estado
@@ -861,15 +866,20 @@ app.get('*', (req, res) => {
 
 // Inicializar base de datos e iniciar servidor
 async function initDb() {
+  console.log('🔍 Diagnosticando variables de base de datos...');
   if (DATABASE_URL) {
+    console.log(`   DATABASE_URL encontrada (${DATABASE_URL.slice(0, 16)}...). Conectando a Neon PostgreSQL...`);
     try {
       const ok = await initNeon();
       if (ok) return 'Neon PostgreSQL';
     } catch (err) {
       console.error('❌ Error al conectar a Neon PostgreSQL:', err.message);
     }
+  } else {
+    console.log('   DATABASE_URL: NO detectada en process.env');
   }
   if (MONGODB_URI) {
+    console.log('   MONGODB_URI encontrada. Conectando a MongoDB Atlas...');
     try {
       const ok = await initMongo();
       if (ok) return 'MongoDB Atlas';
