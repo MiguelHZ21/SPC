@@ -145,7 +145,55 @@ function loadStore() {
   }
 }
 
+/* ---------- MongoDB Atlas (opcional, recomendado en Render) ---------- */
+const MONGODB_URI = process.env.MONGODB_URI || '';
+let mongoCol = null;
+let mongoTimer = null;
+let mongoPending = false;
+
+async function initMongo() {
+  if (!MONGODB_URI) {
+    console.log('ℹ️  MONGODB_URI no definido: usando archivo local data/store.json');
+    return;
+  }
+  const { MongoClient } = require('mongodb');
+  const client = new MongoClient(MONGODB_URI, { serverSelectionTimeoutMS: 15000 });
+  await client.connect();
+  const dbName = process.env.MONGODB_DB || 'mision_bajo_control';
+  mongoCol = client.db(dbName).collection('store');
+  const doc = await mongoCol.findOne({ _id: 'main' });
+  if (doc && Array.isArray(doc.teams) && doc.teams.length) {
+    store = { version: doc.version || 1, teams: doc.teams, config: doc.config || {} };
+    console.log(`✅ MongoDB conectado: ${store.teams.length} equipos cargados`);
+  } else {
+    await flushMongo();
+    console.log('✅ MongoDB conectado: base inicializada con los equipos locales');
+  }
+}
+
+async function flushMongo() {
+  if (!mongoCol) return;
+  try {
+    await mongoCol.replaceOne(
+      { _id: 'main' },
+      { _id: 'main', version: store.version, teams: store.teams, config: store.config, updatedAt: new Date() },
+      { upsert: true }
+    );
+  } catch (e) {
+    console.error('Error al guardar en MongoDB:', e.message);
+    mongoPending = true;
+  }
+}
+
+function scheduleMongoSave() {
+  if (!mongoCol) return;
+  if (mongoTimer) clearTimeout(mongoTimer);
+  mongoTimer = setTimeout(() => { mongoTimer = null; mongoPending = false; flushMongo(); }, 300);
+}
+setInterval(() => { if (mongoPending) { mongoPending = false; flushMongo(); } }, 10000);
+
 function saveStore() {
+  scheduleMongoSave();
   try {
     const tempFile = STORE_FILE + '.tmp';
     fs.writeFileSync(tempFile, JSON.stringify(store, null, 2), 'utf8');
@@ -662,11 +710,15 @@ app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// Iniciar servidor
-app.listen(PORT, () => {
-  console.log(`===============================================`);
-  console.log(`🚀 MISIÓN BAJO CONTROL - Servidor Seguro Activo`);
-  console.log(`📡 Puerto: ${PORT}`);
-  console.log(`🔒 Modo seguro con validación backend activado`);
-  console.log(`===============================================`);
-});
+// Iniciar servidor (primero carga datos desde MongoDB si está configurado)
+initMongo()
+  .catch(err => console.error('❌ No se pudo conectar a MongoDB, usando archivo local:', err.message))
+  .finally(() => {
+    app.listen(PORT, () => {
+      console.log(`===============================================`);
+      console.log(`🚀 MISIÓN BAJO CONTROL - Servidor Seguro Activo`);
+      console.log(`📡 Puerto: ${PORT}`);
+      console.log(`💾 Almacenamiento: ${mongoCol ? 'MongoDB Atlas' : 'Archivo local'}`);
+      console.log(`===============================================`);
+    });
+  });
