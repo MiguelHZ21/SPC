@@ -145,17 +145,163 @@ function loadStore() {
   }
 }
 
-/* ---------- MongoDB Atlas (opcional, recomendado en Render) ---------- */
+/* ---------- Neon / PostgreSQL (Recomendado en Render) ---------- */
+const DATABASE_URL = process.env.DATABASE_URL || process.env.POSTGRES_URL || process.env.NEON_DATABASE_URL || '';
+let pgPool = null;
+let pgTimer = null;
+let pgPending = false;
+
+async function initNeon() {
+  if (!DATABASE_URL) return false;
+  const { Pool } = require('pg');
+  pgPool = new Pool({
+    connectionString: DATABASE_URL,
+    ssl: { rejectUnauthorized: false },
+    connectionTimeoutMillis: 10000
+  });
+
+  // 1. Crear tablas si no existen
+  await pgPool.query(`
+    CREATE TABLE IF NOT EXISTS teams (
+      id VARCHAR(50) PRIMARY KEY,
+      name VARCHAR(100) NOT NULL,
+      shift VARCHAR(50) DEFAULT '',
+      color INT DEFAULT 0,
+      total INT DEFAULT 0,
+      unlocked JSONB DEFAULT '{}'::jsonb,
+      attempts JSONB DEFAULT '{}'::jsonb,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_teams_total ON teams (total DESC);
+
+    CREATE TABLE IF NOT EXISTS app_config (
+      key VARCHAR(50) PRIMARY KEY,
+      value JSONB NOT NULL,
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS attempt_logs (
+      id SERIAL PRIMARY KEY,
+      team_id VARCHAR(50) REFERENCES teams(id) ON DELETE CASCADE,
+      level INT NOT NULL,
+      attempt_type VARCHAR(20) NOT NULL,
+      status VARCHAR(20) NOT NULL,
+      score INT DEFAULT 0,
+      success BOOLEAN DEFAULT FALSE,
+      reason VARCHAR(50),
+      cpk NUMERIC(6,2),
+      cp NUMERIC(6,2),
+      in_ctrl INT,
+      quiz BOOLEAN,
+      rings VARCHAR(20),
+      signals JSONB,
+      started_at TIMESTAMPTZ,
+      ended_at TIMESTAMPTZ
+    );
+    CREATE INDEX IF NOT EXISTS idx_attempt_logs_team_level ON attempt_logs (team_id, level);
+  `);
+
+  // 2. Cargar configuración
+  const configRes = await pgPool.query('SELECT value FROM app_config WHERE key = $1', ['main']);
+  if (configRes.rows.length && configRes.rows[0].value) {
+    store.config = configRes.rows[0].value;
+  }
+
+  // 3. Cargar equipos
+  const teamsRes = await pgPool.query('SELECT id, name, shift, color, total, unlocked, attempts, created_at FROM teams');
+  if (teamsRes.rows.length) {
+    store.teams = teamsRes.rows.map(r => ({
+      id: r.id,
+      name: r.name,
+      shift: r.shift || '',
+      color: r.color == null ? 0 : r.color,
+      total: r.total || 0,
+      unlocked: r.unlocked || {},
+      attempts: r.attempts || {},
+      created: r.created_at ? new Date(r.created_at).toISOString() : new Date().toISOString()
+    }));
+    console.log(`✅ Neon PostgreSQL conectado: ${store.teams.length} equipos cargados`);
+  } else {
+    // Si la tabla está vacía, inicializar con los equipos locales
+    await flushNeon();
+    console.log('✅ Neon PostgreSQL conectado: base inicializada con los equipos locales');
+  }
+  return true;
+}
+
+async function flushNeon() {
+  if (!pgPool) return;
+  try {
+    const client = await pgPool.connect();
+    try {
+      await client.query('BEGIN');
+      // Guardar configuración
+      await client.query(`
+        INSERT INTO app_config (key, value, updated_at)
+        VALUES ('main', $1, NOW())
+        ON CONFLICT (key) DO UPDATE SET value = $1, updated_at = NOW()
+      `, [JSON.stringify(store.config || {})]);
+
+      // Eliminar equipos que ya no existan en memoria
+      const currentIds = store.teams.map(t => t.id);
+      if (currentIds.length) {
+        await client.query('DELETE FROM teams WHERE NOT (id = ANY($1))', [currentIds]);
+      } else {
+        await client.query('DELETE FROM teams');
+      }
+
+      // Upsert de cada equipo
+      for (const t of store.teams) {
+        await client.query(`
+          INSERT INTO teams (id, name, shift, color, total, unlocked, attempts, updated_at)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+          ON CONFLICT (id) DO UPDATE SET
+            name = EXCLUDED.name,
+            shift = EXCLUDED.shift,
+            color = EXCLUDED.color,
+            total = EXCLUDED.total,
+            unlocked = EXCLUDED.unlocked,
+            attempts = EXCLUDED.attempts,
+            updated_at = NOW()
+        `, [
+          t.id,
+          t.name,
+          t.shift || '',
+          t.color == null ? 0 : t.color,
+          t.total || 0,
+          JSON.stringify(t.unlocked || {}),
+          JSON.stringify(t.attempts || {})
+        ]);
+      }
+      await client.query('COMMIT');
+    } catch (e) {
+      await client.query('ROLLBACK');
+      throw e;
+    } finally {
+      client.release();
+    }
+  } catch (err) {
+    console.error('Error al guardar en Neon PostgreSQL:', err.message);
+    pgPending = true;
+  }
+}
+
+function scheduleNeonSave() {
+  if (!pgPool) return;
+  if (pgTimer) clearTimeout(pgTimer);
+  pgTimer = setTimeout(() => { pgTimer = null; pgPending = false; flushNeon(); }, 300);
+}
+setInterval(() => { if (pgPending) { pgPending = false; flushNeon(); } }, 10000);
+
+/* ---------- MongoDB Atlas (soporte alternativo) ---------- */
 const MONGODB_URI = process.env.MONGODB_URI || '';
 let mongoCol = null;
 let mongoTimer = null;
 let mongoPending = false;
 
 async function initMongo() {
-  if (!MONGODB_URI) {
-    console.log('ℹ️  MONGODB_URI no definido: usando archivo local data/store.json');
-    return;
-  }
+  if (!MONGODB_URI) return false;
   const { MongoClient } = require('mongodb');
   const client = new MongoClient(MONGODB_URI, { serverSelectionTimeoutMS: 15000 });
   await client.connect();
@@ -169,6 +315,7 @@ async function initMongo() {
     await flushMongo();
     console.log('✅ MongoDB conectado: base inicializada con los equipos locales');
   }
+  return true;
 }
 
 async function flushMongo() {
@@ -193,6 +340,7 @@ function scheduleMongoSave() {
 setInterval(() => { if (mongoPending) { mongoPending = false; flushMongo(); } }, 10000);
 
 function saveStore() {
+  scheduleNeonSave();
   scheduleMongoSave();
   try {
     const tempFile = STORE_FILE + '.tmp';
@@ -710,15 +858,33 @@ app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// Iniciar servidor (primero carga datos desde MongoDB si está configurado)
-initMongo()
-  .catch(err => console.error('❌ No se pudo conectar a MongoDB, usando archivo local:', err.message))
-  .finally(() => {
-    app.listen(PORT, () => {
-      console.log(`===============================================`);
-      console.log(`🚀 MISIÓN BAJO CONTROL - Servidor Seguro Activo`);
-      console.log(`📡 Puerto: ${PORT}`);
-      console.log(`💾 Almacenamiento: ${mongoCol ? 'MongoDB Atlas' : 'Archivo local'}`);
-      console.log(`===============================================`);
-    });
+// Inicializar base de datos e iniciar servidor
+async function initDb() {
+  if (DATABASE_URL) {
+    try {
+      const ok = await initNeon();
+      if (ok) return 'Neon PostgreSQL';
+    } catch (err) {
+      console.error('❌ Error al conectar a Neon PostgreSQL:', err.message);
+    }
+  }
+  if (MONGODB_URI) {
+    try {
+      const ok = await initMongo();
+      if (ok) return 'MongoDB Atlas';
+    } catch (err) {
+      console.error('❌ Error al conectar a MongoDB:', err.message);
+    }
+  }
+  return 'Archivo local (data/store.json)';
+}
+
+initDb().then(storageName => {
+  app.listen(PORT, () => {
+    console.log(`===============================================`);
+    console.log(`🚀 MISIÓN BAJO CONTROL - Servidor Seguro Activo`);
+    console.log(`📡 Puerto: ${PORT}`);
+    console.log(`💾 Almacenamiento: ${storageName}`);
+    console.log(`===============================================`);
   });
+});
