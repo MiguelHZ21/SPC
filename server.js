@@ -387,15 +387,59 @@ function sanitizeForCSV(str) {
 }
 
 function calcTotal(team) {
+  if (!team) return 0;
   let s = 0;
+  let hasCompleted = false;
   for (let n = 1; n <= 5; n++) {
     const attObj = team.attempts && (team.attempts[n] || team.attempts[String(n)]);
     const f = attObj && attObj.final;
     if (f && typeof f.score === 'number' && isFinite(f.score) && f.status === 'completado') {
       s += Math.max(0, Math.round(f.score));
+      hasCompleted = true;
     }
   }
+  const dbTotal = (team.total != null && !isNaN(team.total)) ? Math.round(Number(team.total)) : null;
+  if (dbTotal != null && !hasCompleted) return dbTotal;
+  if (dbTotal != null && dbTotal !== s) return dbTotal;
   return s;
+}
+
+// Sincronización bidireccional activa con Neon (detecta cambios manuales en el editor SQL)
+let lastNeonSync = 0;
+async function syncFromNeon(force = false) {
+  if (!pgPool) return;
+  const now = Date.now();
+  if (!force && (now - lastNeonSync) < 1500) return;
+  lastNeonSync = now;
+  try {
+    const teamsRes = await pgPool.query('SELECT id, name, shift, color, total, unlocked, attempts, created_at FROM teams');
+    if (teamsRes.rows.length) {
+      const dbTeams = teamsRes.rows.map(r => ({
+        id: r.id,
+        name: r.name,
+        shift: r.shift || '',
+        color: r.color == null ? 0 : r.color,
+        total: r.total == null ? 0 : Number(r.total),
+        unlocked: r.unlocked || {},
+        attempts: r.attempts || {},
+        created: r.created_at ? new Date(r.created_at).toISOString() : new Date().toISOString()
+      }));
+      // Si la base de datos tiene datos distintos a los de memoria (ej. cambio manual en Neon)
+      if (JSON.stringify(dbTeams) !== JSON.stringify(store.teams)) {
+        store.teams = dbTeams;
+        store.version = (store.version || 1) + 1;
+      }
+    }
+    const configRes = await pgPool.query('SELECT value FROM app_config WHERE key = $1', ['main']);
+    if (configRes.rows.length && configRes.rows[0].value) {
+      if (JSON.stringify(configRes.rows[0].value) !== JSON.stringify(store.config)) {
+        store.config = configRes.rows[0].value;
+        store.version = (store.version || 1) + 1;
+      }
+    }
+  } catch (err) {
+    console.error('Error al sincronizar desde Neon:', err.message);
+  }
 }
 
 // Middleware de autenticación de Administrador (Control de Calidad)
@@ -425,7 +469,8 @@ app.get('/api/ping', (req, res) => {
 });
 
 // 1. Estado sincronizado completo (versión, equipos, configuración)
-app.get('/api/state', (req, res) => {
+app.get('/api/state', async (req, res) => {
+  await syncFromNeon();
   res.json({
     version: store.version || 1,
     teams: store.teams || [],
@@ -434,12 +479,13 @@ app.get('/api/state', (req, res) => {
 });
 
 // 2. Obtener un equipo individual por ID
-app.get('/api/teams/:id', (req, res) => {
+app.get('/api/teams/:id', async (req, res) => {
+  await syncFromNeon();
   const team = store.teams.find(t => t.id === req.params.id);
   if (!team) {
     return res.status(404).json({ error: 'Equipo no encontrado' });
   }
-  res.json(team);
+  res.json(Object.assign({}, team, { total: calcTotal(team) }));
 });
 
 // 3. Crear o actualizar equipo por ID (sincronizado con Store.updateTeam / Store.addTeam)
@@ -549,12 +595,14 @@ app.get('/api/health', async (req, res) => {
 });
 
 // 2. Obtener lista pública de equipos y estado
-app.get('/api/teams', (req, res) => {
+app.get('/api/teams', async (req, res) => {
+  await syncFromNeon();
   // Retornar solo los datos necesarios
   const safeTeams = store.teams.map(t => ({
     id: t.id,
     name: t.name,
     shift: t.shift,
+    color: t.color,
     unlocked: t.unlocked || {},
     attempts: t.attempts || {},
     total: calcTotal(t)

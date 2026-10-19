@@ -1727,7 +1727,7 @@ function teamPaint(t){return PAINTS[t&&t.color!=null&&PAINTS[t.color]?t.color:0]
 function pickColor(used){used=used||new Set(Store.teams.filter(t=>t.color!=null).map(t=>t.color));const free=PAINTS.map((_,i)=>i).filter(i=>!used.has(i));const pool=free.length?free:PAINTS.map((_,i)=>i);return pool[Math.floor(Math.random()*pool.length)];}
 function paintJet(t){if(jetPaint)jetPaint.color.setHex(teamPaint(t).c);}
 async function assignMissingColors(){if(!Store.canWrite)return;const used=new Set(Store.teams.filter(t=>t.color!=null).map(t=>t.color));for(const t of Store.teams.slice()){if(t.color==null){const c=pickColor(used);used.add(c);try{await Store.updateTeam(t.id,{color:c});}catch(e){}}}}
-function calcTotal(team){let s=0;for(let n=1;n<=5;n++){const f=att(team,n).final;if(f&&typeof f.score==='number'&&isFinite(f.score)&&f.status==='completado')s+=Math.max(0,Math.round(f.score));}return s;}
+function calcTotal(team){if(!team)return 0;let s=0,hasCompleted=false;for(let n=1;n<=5;n++){const f=att(team,n).final;if(f&&typeof f.score==='number'&&isFinite(f.score)&&f.status==='completado'){s+=Math.max(0,Math.round(f.score));hasCompleted=true;}}const dbTotal=(team.total!=null&&!isNaN(team.total))?Math.round(Number(team.total)):null;if(dbTotal!=null&&!hasCompleted)return dbTotal;if(dbTotal!=null&&dbTotal!==s)return dbTotal;return s;}
 
 /* ================= ESTADO DEL JUEGO ================= */
 const G={state:'boot',paused:false,level:0,teamId:null,attemptType:'practice',timeScale:1,shake:0,flash:0,t:0,R:null,F:null,quiz:null,result:null,menuSel:0,camMode:'chase',idle:{a:0,off:0}};
