@@ -185,6 +185,11 @@ async function initNeon() {
         shift VARCHAR(50) DEFAULT '',
         color INT DEFAULT 0,
         total INT DEFAULT 0,
+        score_l1 INT DEFAULT 0,
+        score_l2 INT DEFAULT 0,
+        score_l3 INT DEFAULT 0,
+        score_l4 INT DEFAULT 0,
+        score_l5 INT DEFAULT 0,
         unlocked JSONB DEFAULT '{}'::jsonb,
         attempts JSONB DEFAULT '{}'::jsonb,
         created_at TIMESTAMPTZ DEFAULT NOW(),
@@ -214,6 +219,26 @@ async function initNeon() {
         ended_at TIMESTAMPTZ
       );
     `);
+    // Asegurar que existan las columnas de puntaje definitivo por nivel
+    try {
+      await pgPool.query(`
+        ALTER TABLE teams ADD COLUMN IF NOT EXISTS score_l1 INT DEFAULT 0;
+        ALTER TABLE teams ADD COLUMN IF NOT EXISTS score_l2 INT DEFAULT 0;
+        ALTER TABLE teams ADD COLUMN IF NOT EXISTS score_l3 INT DEFAULT 0;
+        ALTER TABLE teams ADD COLUMN IF NOT EXISTS score_l4 INT DEFAULT 0;
+        ALTER TABLE teams ADD COLUMN IF NOT EXISTS score_l5 INT DEFAULT 0;
+      `);
+      // Migrar puntajes existentes de attempts a sus columnas correspondientes
+      await pgPool.query(`
+        UPDATE teams SET
+          score_l1 = COALESCE(NULLIF(attempts->'1'->'final'->>'score', '')::int, score_l1),
+          score_l2 = COALESCE(NULLIF(attempts->'2'->'final'->>'score', '')::int, score_l2),
+          score_l3 = COALESCE(NULLIF(attempts->'3'->'final'->>'score', '')::int, score_l3),
+          score_l4 = COALESCE(NULLIF(attempts->'4'->'final'->>'score', '')::int, score_l4),
+          score_l5 = COALESCE(NULLIF(attempts->'5'->'final'->>'score', '')::int, score_l5)
+        WHERE attempts IS NOT NULL AND attempts != '{}'::jsonb;
+      `);
+    } catch (colErr) {}
     try { await pgPool.query(`CREATE INDEX IF NOT EXISTS idx_teams_total ON teams (total DESC);`); } catch (e) {}
     try { await pgPool.query(`CREATE INDEX IF NOT EXISTS idx_attempt_logs_team_level ON attempt_logs (team_id, level);`); } catch (e) {}
   } catch (ddlErr) {
@@ -226,20 +251,36 @@ async function initNeon() {
     store.config = configRes.rows[0].value;
   }
 
-  // 3. Cargar equipos
-  const teamsRes = await pgPool.query('SELECT id, name, shift, color, total, unlocked, attempts, created_at FROM teams');
+  // 3. Cargar equipos con puntajes definitivos de cada nivel
+  const teamsRes = await pgPool.query('SELECT id, name, shift, color, total, score_l1, score_l2, score_l3, score_l4, score_l5, unlocked, attempts, created_at FROM teams');
   if (teamsRes.rows.length) {
-    store.teams = teamsRes.rows.map(r => ({
-      id: r.id,
-      name: r.name,
-      shift: r.shift || '',
-      color: r.color == null ? 0 : r.color,
-      total: r.total || 0,
-      unlocked: r.unlocked || {},
-      attempts: r.attempts || {},
-      created: r.created_at ? new Date(r.created_at).toISOString() : new Date().toISOString()
-    }));
-    console.log(`✅ Neon PostgreSQL conectado: ${store.teams.length} equipos cargados`);
+    store.teams = teamsRes.rows.map(r => {
+      const atts = r.attempts || {};
+      for (let n = 1; n <= 5; n++) {
+        const sc = r['score_l' + n] != null ? Number(r['score_l' + n]) : 0;
+        if (sc > 0) {
+          if (!atts[n]) atts[n] = {};
+          if (!atts[n].final) atts[n].final = { status: 'completado', score: sc };
+          else atts[n].final.score = sc;
+        }
+      }
+      return {
+        id: r.id,
+        name: r.name,
+        shift: r.shift || '',
+        color: r.color == null ? 0 : r.color,
+        total: r.total == null ? 0 : Number(r.total),
+        score_l1: r.score_l1 == null ? 0 : Number(r.score_l1),
+        score_l2: r.score_l2 == null ? 0 : Number(r.score_l2),
+        score_l3: r.score_l3 == null ? 0 : Number(r.score_l3),
+        score_l4: r.score_l4 == null ? 0 : Number(r.score_l4),
+        score_l5: r.score_l5 == null ? 0 : Number(r.score_l5),
+        unlocked: r.unlocked || {},
+        attempts: atts,
+        created: r.created_at ? new Date(r.created_at).toISOString() : new Date().toISOString()
+      };
+    });
+    console.log(`✅ Neon PostgreSQL conectado: ${store.teams.length} equipos cargados con puntajes de BD`);
   } else {
     // Si la tabla está vacía, inicializar con los equipos locales
     await flushNeon();
@@ -269,16 +310,21 @@ async function flushNeon() {
         await client.query('DELETE FROM teams');
       }
 
-      // Upsert de cada equipo
+      // Upsert de cada equipo con sus puntajes definitivos por nivel
       for (const t of store.teams) {
         await client.query(`
-          INSERT INTO teams (id, name, shift, color, total, unlocked, attempts, updated_at)
-          VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+          INSERT INTO teams (id, name, shift, color, total, score_l1, score_l2, score_l3, score_l4, score_l5, unlocked, attempts, updated_at)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW())
           ON CONFLICT (id) DO UPDATE SET
             name = EXCLUDED.name,
             shift = EXCLUDED.shift,
             color = EXCLUDED.color,
             total = EXCLUDED.total,
+            score_l1 = EXCLUDED.score_l1,
+            score_l2 = EXCLUDED.score_l2,
+            score_l3 = EXCLUDED.score_l3,
+            score_l4 = EXCLUDED.score_l4,
+            score_l5 = EXCLUDED.score_l5,
             unlocked = EXCLUDED.unlocked,
             attempts = EXCLUDED.attempts,
             updated_at = NOW()
@@ -287,7 +333,12 @@ async function flushNeon() {
           t.name,
           t.shift || '',
           t.color == null ? 0 : t.color,
-          t.total || 0,
+          calcTotal(t),
+          t.score_l1 || 0,
+          t.score_l2 || 0,
+          t.score_l3 || 0,
+          t.score_l4 || 0,
+          t.score_l5 || 0,
           JSON.stringify(t.unlocked || {}),
           JSON.stringify(t.attempts || {})
         ]);
@@ -358,8 +409,14 @@ function scheduleMongoSave() {
 setInterval(() => { if (mongoPending) { mongoPending = false; flushMongo(); } }, 10000);
 
 function saveStore() {
-  scheduleNeonSave();
-  scheduleMongoSave();
+  if (pgPool) {
+    scheduleNeonSave();
+    return; // NO guardar en archivo local: la base de datos Neon es la única fuente de verdad
+  }
+  if (mongoCol) {
+    scheduleMongoSave();
+    return;
+  }
   try {
     const tempFile = STORE_FILE + '.tmp';
     fs.writeFileSync(tempFile, JSON.stringify(store, null, 2), 'utf8');
@@ -391,16 +448,19 @@ function calcTotal(team) {
   let s = 0;
   let hasCompleted = false;
   for (let n = 1; n <= 5; n++) {
+    const colScore = (typeof team['score_l' + n] === 'number' && team['score_l' + n] > 0) ? team['score_l' + n] : null;
     const attObj = team.attempts && (team.attempts[n] || team.attempts[String(n)]);
     const f = attObj && attObj.final;
-    if (f && typeof f.score === 'number' && isFinite(f.score) && f.status === 'completado') {
-      s += Math.max(0, Math.round(f.score));
+    const fScore = (f && typeof f.score === 'number' && isFinite(f.score) && f.status === 'completado') ? f.score : null;
+    const chosenScore = colScore != null ? colScore : fScore;
+    if (chosenScore != null) {
+      s += Math.max(0, Math.round(chosenScore));
       hasCompleted = true;
     }
   }
   const dbTotal = (team.total != null && !isNaN(team.total)) ? Math.round(Number(team.total)) : null;
   if (dbTotal != null && !hasCompleted) return dbTotal;
-  if (dbTotal != null && dbTotal !== s) return dbTotal;
+  if (dbTotal != null && dbTotal !== s) return Math.max(dbTotal, s);
   return s;
 }
 
@@ -412,18 +472,37 @@ async function syncFromNeon(force = false) {
   if (!force && (now - lastNeonSync) < 1500) return;
   lastNeonSync = now;
   try {
-    const teamsRes = await pgPool.query('SELECT id, name, shift, color, total, unlocked, attempts, created_at FROM teams');
+    const teamsRes = await pgPool.query('SELECT id, name, shift, color, total, score_l1, score_l2, score_l3, score_l4, score_l5, unlocked, attempts, created_at FROM teams');
     if (teamsRes.rows.length) {
-      const dbTeams = teamsRes.rows.map(r => ({
-        id: r.id,
-        name: r.name,
-        shift: r.shift || '',
-        color: r.color == null ? 0 : r.color,
-        total: r.total == null ? 0 : Number(r.total),
-        unlocked: r.unlocked || {},
-        attempts: r.attempts || {},
-        created: r.created_at ? new Date(r.created_at).toISOString() : new Date().toISOString()
-      }));
+      const dbTeams = teamsRes.rows.map(r => {
+        const atts = r.attempts || {};
+        for (let n = 1; n <= 5; n++) {
+          const sc = r['score_l' + n] != null ? Number(r['score_l' + n]) : 0;
+          if (sc > 0) {
+            if (!atts[n]) atts[n] = {};
+            if (!atts[n].final) atts[n].final = { status: 'completado', score: sc };
+            else atts[n].final.score = sc;
+          }
+        }
+        const item = {
+          id: r.id,
+          name: r.name,
+          shift: r.shift || '',
+          color: r.color == null ? 0 : r.color,
+          total: r.total == null ? 0 : Number(r.total),
+          score_l1: r.score_l1 == null ? 0 : Number(r.score_l1),
+          score_l2: r.score_l2 == null ? 0 : Number(r.score_l2),
+          score_l3: r.score_l3 == null ? 0 : Number(r.score_l3),
+          score_l4: r.score_l4 == null ? 0 : Number(r.score_l4),
+          score_l5: r.score_l5 == null ? 0 : Number(r.score_l5),
+          unlocked: r.unlocked || {},
+          attempts: atts,
+          created: r.created_at ? new Date(r.created_at).toISOString() : new Date().toISOString()
+        };
+        item.total = calcTotal(item);
+        return item;
+      });
+
       // Si la base de datos tiene datos distintos a los de memoria (ej. cambio manual en Neon)
       if (JSON.stringify(dbTeams) !== JSON.stringify(store.teams)) {
         store.teams = dbTeams;
@@ -489,7 +568,7 @@ app.get('/api/teams/:id', async (req, res) => {
 });
 
 // 3. Crear o actualizar equipo por ID (sincronizado con Store.updateTeam / Store.addTeam)
-app.put('/api/teams/:id', (req, res) => {
+app.put('/api/teams/:id', async (req, res) => {
   const id = req.params.id;
   const doc = req.body;
   if (!doc || typeof doc !== 'object') {
@@ -524,6 +603,17 @@ app.put('/api/teams/:id', (req, res) => {
       }
     }
   }
+
+  // Extraer o actualizar los puntajes definitivos por nivel (score_l1..score_l5)
+  for (let n = 1; n <= 5; n++) {
+    const attObj = doc.attempts && (doc.attempts[n] || doc.attempts[String(n)]);
+    const f = attObj && attObj.final;
+    if (f && typeof f.score === 'number' && isFinite(f.score) && f.status === 'completado') {
+      doc['score_l' + n] = Math.max(0, Math.round(f.score));
+    } else if (typeof doc['score_l' + n] !== 'number') {
+      doc['score_l' + n] = 0;
+    }
+  }
   doc.total = calcTotal(doc);
 
   const idx = store.teams.findIndex(t => t.id === id);
@@ -534,18 +624,97 @@ app.put('/api/teams/:id', (req, res) => {
   }
 
   store.version = (store.version || 1) + 1;
-  saveStore();
+
+  // Persistir INMEDIATAMENTE a Neon PostgreSQL (sin esperar temporizador local)
+  if (pgPool) {
+    try {
+      await pgPool.query(`
+        INSERT INTO teams (id, name, shift, color, total, score_l1, score_l2, score_l3, score_l4, score_l5, unlocked, attempts, updated_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW())
+        ON CONFLICT (id) DO UPDATE SET
+          name = EXCLUDED.name,
+          shift = EXCLUDED.shift,
+          color = EXCLUDED.color,
+          total = EXCLUDED.total,
+          score_l1 = EXCLUDED.score_l1,
+          score_l2 = EXCLUDED.score_l2,
+          score_l3 = EXCLUDED.score_l3,
+          score_l4 = EXCLUDED.score_l4,
+          score_l5 = EXCLUDED.score_l5,
+          unlocked = EXCLUDED.unlocked,
+          attempts = EXCLUDED.attempts,
+          updated_at = NOW();
+      `, [
+        doc.id,
+        doc.name,
+        doc.shift || '',
+        doc.color == null ? 0 : doc.color,
+        doc.total || 0,
+        doc.score_l1 || 0,
+        doc.score_l2 || 0,
+        doc.score_l3 || 0,
+        doc.score_l4 || 0,
+        doc.score_l5 || 0,
+        JSON.stringify(doc.unlocked || {}),
+        JSON.stringify(doc.attempts || {})
+      ]);
+
+      // Guardar también en attempt_logs para trazabilidad histórica en Neon
+      if (doc.attempts) {
+        for (const lvl in doc.attempts) {
+          for (const type of ['practice', 'practice2', 'final']) {
+            const a = doc.attempts[lvl] && doc.attempts[lvl][type];
+            if (a && a.status === 'completado') {
+              await pgPool.query(`
+                INSERT INTO attempt_logs (team_id, level, attempt_type, status, score, success, reason, cpk, cp, in_ctrl, quiz, rings, signals, started_at, ended_at)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+              `, [
+                doc.id,
+                parseInt(lvl, 10),
+                type,
+                a.status,
+                a.score || 0,
+                !!a.success,
+                a.reason || 'ok',
+                a.cpk || null,
+                a.cp || null,
+                a.inCtrl || null,
+                !!a.quiz,
+                a.rings || null,
+                JSON.stringify(a.signals || {}),
+                a.startedAt ? new Date(a.startedAt) : null,
+                a.endedAt ? new Date(a.endedAt) : new Date()
+              ]).catch(() => {});
+            }
+          }
+        }
+      }
+    } catch (dbErr) {
+      console.error('Error al persistir en Neon:', dbErr.message);
+    }
+  } else {
+    saveStore();
+  }
+
   res.json(doc);
 });
 
 // 4. Eliminar equipo por ID
-app.delete('/api/teams/:id', (req, res) => {
+app.delete('/api/teams/:id', async (req, res) => {
   const id = req.params.id;
   const idx = store.teams.findIndex(t => t.id === id);
   if (idx >= 0) {
     store.teams.splice(idx, 1);
     store.version = (store.version || 1) + 1;
-    saveStore();
+    if (pgPool) {
+      try {
+        await pgPool.query('DELETE FROM teams WHERE id = $1', [id]);
+      } catch (e) {
+        console.error('Error al eliminar de Neon:', e.message);
+      }
+    } else {
+      saveStore();
+    }
   }
   res.json({ ok: true });
 });

@@ -2,18 +2,30 @@
 -- MISIÓN BAJO CONTROL · Esquema de Base de Datos para Neon (PostgreSQL)
 -- ==========================================================
 
--- 1. Tabla de Equipos (Información principal, progreso, intentos y puntaje total)
+-- 1. Tabla de Equipos (Información principal, progreso, intentos, puntaje total y definitivos)
 CREATE TABLE IF NOT EXISTS teams (
     id VARCHAR(50) PRIMARY KEY,
     name VARCHAR(100) NOT NULL,
     shift VARCHAR(50) DEFAULT '',
     color INT DEFAULT 0,
     total INT DEFAULT 0,
+    score_l1 INT DEFAULT 0,
+    score_l2 INT DEFAULT 0,
+    score_l3 INT DEFAULT 0,
+    score_l4 INT DEFAULT 0,
+    score_l5 INT DEFAULT 0,
     unlocked JSONB DEFAULT '{}'::jsonb,
     attempts JSONB DEFAULT '{}'::jsonb,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Migración segura si la tabla ya existía:
+ALTER TABLE teams ADD COLUMN IF NOT EXISTS score_l1 INT DEFAULT 0;
+ALTER TABLE teams ADD COLUMN IF NOT EXISTS score_l2 INT DEFAULT 0;
+ALTER TABLE teams ADD COLUMN IF NOT EXISTS score_l3 INT DEFAULT 0;
+ALTER TABLE teams ADD COLUMN IF NOT EXISTS score_l4 INT DEFAULT 0;
+ALTER TABLE teams ADD COLUMN IF NOT EXISTS score_l5 INT DEFAULT 0;
 
 -- Índice para acelerar el ranking y consultas por puntaje total
 CREATE INDEX IF NOT EXISTS idx_teams_total ON teams (total DESC);
