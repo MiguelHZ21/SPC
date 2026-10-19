@@ -1352,35 +1352,35 @@ function checkCode(n,code){return sha256('mbc26:'+normCode(code))===CODE_HASH[n-
 
 /* ================= NIVELES SPC ================= */
 const LEVELS=[
-{n:1,dia:'Lunes',tema:'Variación común vs. especial',vr:31,aMax:2.4,runLen:600,unstable:0.45,noise:0.8,gust:[4.5,7],gustF:7,drift:0,obstacles:false,msa:false,inv:null,jump:false,obs:[2.4,3.6],specStart:5,specEnd:5,
+{n:1,dia:'Lunes',tema:'Variación común vs. especial',vr:31,rwTime:40,aMax:0.969,runLen:910,unstable:0.45,noise:0.8,gust:[4.5,7],gustF:7,drift:0,obstacles:false,msa:false,inv:null,jump:false,obs:[2.4,3.6],specStart:5,specEnd:5,
  fl:{dur:34,ringR:1.5,turb:0.7,wind:0,msa:false,spec:false,types:['out'],decoy:0,cad:1.0,gap:[4,6]},
  mech:['El avión tiende a irse a los lados (variación común) y llegan <em>ráfagas de viento</em> (causa especial).','Anillos amplios. El copiloto vigila la carta del motor y detecta <em>puntos fuera de los límites de control</em>.'],
  intro:'El avión tiende a irse hacia los lados: esa es la <em>variación común</em>, corrígela con suavidad. Las ráfagas de viento son <em>causas especiales</em>: llegan de pronto y exigen reacción.',
  q:{t:'Un operario ajusta la máquina cada vez que la densidad cambia un poco, aunque los puntos siguen dentro de los límites de control. ¿Qué está pasando?',o:['Es un control proactivo excelente','Es sobreajuste: reacciona a variación común y termina aumentando la variación','Es una causa especial que hay que eliminar','Es la única forma de cumplir la especificación'],c:1,e:'La variación común es el ruido natural del proceso. Ajustar por cada pequeño cambio mete variación extra. Solo se reacciona ante señales de causa especial.'},
  fail:'Las ráfagas exigían reacción inmediata, pero corregir con fuerza cada pequeña desviación también te saca de rumbo: eso se llama sobreajuste.',
  lesson:'Variación común: se gestiona mejorando el sistema. Variación especial: se investiga y se elimina en el momento.'},
-{n:2,dia:'Martes',tema:'Límites de control ≠ especificación',vr:32,aMax:2.4,runLen:640,unstable:0.55,noise:0.85,gust:[6,10],gustF:7,drift:0,obstacles:true,msa:false,inv:null,jump:false,obs:[2.2,3.4],specStart:5,specEnd:5,
+{n:2,dia:'Martes',tema:'Límites de control ≠ especificación',vr:32,rwTime:42,aMax:0.952,runLen:980,unstable:0.55,noise:0.85,gust:[6,10],gustF:7,drift:0,obstacles:true,msa:false,inv:null,jump:false,obs:[2.2,3.4],specStart:5,specEnd:5,
  fl:{dur:34,ringR:1.25,turb:0.85,wind:0,msa:false,spec:true,types:['out'],decoy:0.45,cad:1.0,gap:[4,6]},
  mech:['Aparecen <em>obstáculos</em>: piedras, charcos de aceite y zonas de mantenimiento que te desvían.','Anillos medianos. En la carta del motor verás la especificación: hay puntos cerca de los límites que <em>NO son señal</em>.'],
  intro:'Las líneas <em>naranja</em> (LIC/LSC) son los límites de TU proceso. Las <em>rojas</em> (LIE/LSE) son la especificación del cliente. Puedes cumplirle al cliente y aun así estar fuera de control.',
  q:{t:'Un punto está DENTRO de la especificación del cliente pero POR FUERA del LSC. ¿Qué haces?',o:['Nada: el cliente lo acepta','Investigar la causa especial: el proceso cambió aunque el producto aún cumpla','Ampliar los límites de control para que no vuelva a pasar','Mover los límites de especificación'],c:1,e:'Los límites de control son la voz del proceso; la especificación es la voz del cliente. Un punto fuera de control es una alarma temprana: actuar ahí evita producir no conforme.'},
  fail:'Los límites de control (naranja) te avisan ANTES de que el cliente reciba producto malo. Si reaccionas al cruzar el LSC/LIC, nunca llegas al LIE/LSE.',
  lesson:'Los límites de control los calcula el proceso (X̄ ± 3σ). La especificación la define el cliente. Son cosas distintas y se leen distinto.'},
-{n:3,dia:'Miércoles',tema:'MSA y calibración',vr:33,aMax:2.4,runLen:700,unstable:0.55,noise:0.8,gust:[6,10],gustF:6,drift:0,obstacles:true,msa:true,inv:null,jump:false,obs:[2.2,3.4],specStart:5,specEnd:5,
+{n:3,dia:'Miércoles',tema:'MSA y calibración',vr:33,rwTime:45,aMax:0.917,runLen:1080,unstable:0.55,noise:0.8,gust:[6,10],gustF:6,drift:0,obstacles:true,msa:true,inv:null,jump:false,obs:[2.2,3.4],specStart:5,specEnd:5,
  fl:{dur:34,ringR:1.15,turb:0.9,wind:0,msa:true,spec:true,types:['out'],decoy:0,cad:1.0,gap:[4,6]},
  mech:['Obstáculos + <em>instrumento que se descalibra</em>: pulsa CALIBRAR (barra espaciadora) al menos cada 10 s.','El altímetro y el sensor de temperatura también se descalibran: con lecturas ruidosas verás "señales" falsas. <em>Calibra antes de decidir</em>.'],
  intro:'Tu instrumento de medición se descalibra con el tiempo y te muestra una posición falsa. Pulsa <em>CALIBRAR</em> (barra espaciadora) al menos cada 10 segundos.',
  q:{t:'Antes de llevar las lecturas de un espectrofotómetro a una carta de control, lo primero es:',o:['Graficar de inmediato para no perder tiempo','Asegurar que el sistema de medición sea confiable (calibración / MSA)','Pedir al siguiente turno que mida de nuevo','Ajustar la máquina con la primera lectura'],c:1,e:'Si el sistema de medición tiene sesgo o mucha variación, la carta muestra un proceso que no existe. Primero se valida la medición (MSA), después se controla el proceso.'},
  fail:'Controlabas el avión con una medición falsa: el instrumento estaba descalibrado. Sin un sistema de medición confiable (MSA), la carta de control miente y las decisiones son erróneas.',
  lesson:'Una carta de control solo es tan buena como el sistema de medición que la alimenta. Calibrar no es opcional.'},
-{n:4,dia:'Jueves',tema:'Reglas de detección',vr:33.5,aMax:2.4,runLen:770,unstable:0.5,noise:0.7,gust:[7,11],gustF:6,drift:1.8,obstacles:true,msa:true,inv:'sudden',jump:false,obs:[2.2,3.2],specStart:5,specEnd:5,
+{n:4,dia:'Jueves',tema:'Reglas de detección',vr:33.5,rwTime:48,aMax:0.872,runLen:1170,unstable:0.5,noise:0.7,gust:[7,11],gustF:6,drift:1.8,obstacles:true,msa:true,inv:'sudden',jump:false,obs:[2.2,3.2],specStart:5,specEnd:5,
  fl:{dur:38,ringR:1.05,turb:0.95,wind:3.2,msa:true,spec:true,types:['out','run7'],decoy:0,cad:1.0,gap:[4,6]},
  mech:['Obstáculos + calibración + <em>deriva lenta</em> (la delata la regla de 7 puntos) + <em>cambio de método</em>: a mitad de pista los controles se invierten (izquierda ↔ derecha).','Viento sostenido que empuja el avión. En la carta del motor, además de puntos fuera de límites, aparecen <em>rachas de 7 puntos del mismo lado</em>: se ven como un bloque de 7 puntos del mismo color.'],
  intro:'Distintos cambios se detectan con distintas reglas: una <em>deriva lenta</em> la delata la regla de 7 puntos; un <em>cambio brusco</em> (como un cambio de método) lo delata un punto fuera de control.',
  q:{t:'En una carta aparecen 7 puntos consecutivos por encima de la línea central, todos dentro de los límites de control. ¿Qué significa?',o:['El proceso está estable: no hay puntos fuera de límites','Es una señal de causa especial: posible desplazamiento de la media','Es un error de medición seguro','Hay que recalcular la especificación del cliente'],c:1,e:'Las reglas de detección (Western Electric / Nelson) encuentran causas especiales aunque ningún punto cruce los límites. 7 seguidos de un lado indican un cambio sostenido en la media.'},
  fail:'El cambio de método o la deriva te sacaron de rumbo. Hay que detectar la señal a tiempo: tendencias, rachas y puntos fuera de control son causas especiales.',
  lesson:'No esperes a que un punto salga de los límites: tendencias y rachas también son señales de causa especial.'},
-{n:5,dia:'Viernes',tema:'Capacidad Cp / Cpk',vr:34,aMax:2.6,runLen:840,unstable:0.5,noise:0.8,gust:[7,10],gustF:6,drift:0,obstacles:true,msa:true,inv:'windows',jump:true,obs:[2.6,3.6],specStart:5,specEnd:3.8,
+{n:5,dia:'Viernes',tema:'Capacidad Cp / Cpk',vr:34,rwTime:50,aMax:0.85,runLen:1240,unstable:0.5,noise:0.8,gust:[7,10],gustF:6,drift:0,obstacles:true,msa:true,inv:'windows',jump:true,obs:[2.6,3.6],specStart:5,specEnd:3.8,
  fl:{dur:38,ringR:0.85,turb:1.0,wind:3.6,msa:true,spec:true,types:['out','run7'],decoy:0,cad:1.0,gap:[4,6]},
  mech:['Todo lo anterior + la especificación se <em>estrecha</em> + <em>SALTO</em> (↑ / W, 3 cargas) para esquivar obstáculos sin desviarte. Los controles se invierten en tramos cortos.','Anillos estrechos, viento, instrumentos que se descalibran, puntos fuera de límites y rachas de 7 del mismo color. Meta: Cpk ≥ 1,33.'],
  intro:'A mitad de pista el cliente <em>estrecha la especificación</em>. Solo un proceso con poca variación cabrá. Saltar los obstáculos en vez de esquivarlos de lado reduce tu variación: eso es mejorar la capacidad.',
@@ -1746,7 +1746,7 @@ function updateCapHUD(vals,spec,title){const c=capability(vals,spec);$('#capTitl
  $('#capNote').textContent='Meta: Cpk ≥ 1,33 · Nivel σ ≥ 4 · Especificación ±'+fmt(spec,1);}
 
 /* ------------- Pista ------------- */
-function newRun(){const lv=curLevel();const w1=rand(8,11),w2=rand(19,23);return{x:0,vx:0,mx:0,t:0,dist:0,speed:0,countdown:2.6,cdShown:0,samples:[],sampleT:0,calibrated:false,mean:0,sigma:0,lcl:-5,ucl:5,dispL:-5,dispU:5,ctrlA:0,ooc:false,oocSamples:0,inCtrlSamples:0,trendAlerts:0,runSide:0,runCount:0,trendArmed:true,noiseF:0,gust:null,nextGust:rand(lv.gust[0],lv.gust[1])+2.5,drift:0,driftDir:Math.random()<0.5?-1:1,msaErr:0,msaJit:0,msaT:0,msaWarned:false,spec:lv.specStart,specMsg:false,lastBeep:0,nextObs:4.5,grip:1,gripT:0,hits:0,jumps:0,eff:0,tookOff:false,abortReason:null,inv:false,invAt:rand(0.35,0.5),invWin:[[w1,w1+3.5],[w2,w2+3.5]],invWarn:[false,false],jumpCharges:3,jumpRe:0,jumpT:0,jumpH:0};}
+function newRun(){const lv=curLevel();const rt=lv.rwTime;const w1=rand(0.25,0.35)*rt,w2=rand(0.6,0.7)*rt;return{x:0,vx:0,mx:0,t:0,dist:0,speed:0,countdown:2.6,cdShown:0,samples:[],sampleT:0,calibrated:false,mean:0,sigma:0,lcl:-5,ucl:5,dispL:-5,dispU:5,ctrlA:0,ooc:false,oocSamples:0,inCtrlSamples:0,trendAlerts:0,runSide:0,runCount:0,trendArmed:true,noiseF:0,gust:null,nextGust:rand(lv.gust[0],lv.gust[1])+2.5,drift:0,driftDir:Math.random()<0.5?-1:1,msaErr:0,msaJit:0,msaT:0,msaWarned:false,spec:lv.specStart,specMsg:false,lastBeep:0,nextObs:4.5,grip:1,gripT:0,hits:0,jumps:0,eff:0,tookOff:false,abortReason:null,inv:false,invAt:rand(0.35,0.5),invWin:[[w1,w1+3.5],[w2,w2+3.5]],invWarn:[false,false],holdMsg:false,jumpCharges:3,jumpRe:0,jumpT:0,jumpH:0};}
 
 function startLevel(){
  const lv=curLevel();G.R=newRun();G.F=null;G.quiz=null;G.result=null;G.timeScale=1;G.paused=false;G.flash=0;G.shake=0;G.camMode='chase';
@@ -1788,10 +1788,11 @@ function runwayUpdate(dt){
   AudioSys.engine(0.1,true);updateJetRunway(dt,0);updateLabels(R.spec,R.dispL,R.dispU,0,0,dt);cameraChase(dt);hudRunway(lv);return;}
  R.t+=dt;
  const prog=clamp(R.dist/lv.runLen,0,1);
- R.spec=lerp(lv.specStart,lv.specEnd,smooth(0.25,0.65,prog));
- if(lv.specEnd<lv.specStart&&prog>0.22&&!R.specMsg){R.specMsg=true;impact('CLIENTE AJUSTA ESPECIFICACIÓN','warn','La tolerancia se reduce: ¿tu proceso es capaz?');}
+ const tp=R.t/lv.rwTime;
+ R.spec=lerp(lv.specStart,lv.specEnd,smooth(0.25,0.65,tp));
+ if(lv.specEnd<lv.specStart&&tp>0.22&&!R.specMsg){R.specMsg=true;impact('CLIENTE AJUSTA ESPECIFICACIÓN','warn','La tolerancia se reduce: ¿tu proceso es capaz?');}
  // Cambio de método (controles invertidos)
- if(lv.inv==='sudden'&&!R.inv&&prog>=R.invAt)setInv(true);
+ if(lv.inv==='sudden'&&!R.inv&&R.t>=R.invAt*lv.rwTime)setInv(true);
  if(lv.inv==='windows'){R.invWin.forEach((w,k)=>{if(!R.invWarn[k]&&R.t>=w[0]-1.5&&R.t<w[0]){R.invWarn[k]=true;toast('ATENCIÓN: cambio de método en 1,5 s','warn',1400);AudioSys.beepNow('E5');}});const on=R.invWin.some(w=>R.t>=w[0]&&R.t<w[1]);if(on!==R.inv)setInv(on);}
  // Perturbaciones
  R.noiseF+=(-1.6*R.noiseF)*dt+lv.noise*2.3*Math.sqrt(dt)*gauss();
@@ -1813,7 +1814,11 @@ function runwayUpdate(dt){
  R.mx=lv.msa?R.x+R.msaErr+R.msaJit:R.x;
  // Velocidad: el empuje depende de la estabilidad
  const dev=Math.abs(R.x)/R.spec;let eff=1-1.55*dev;if(R.ooc)eff-=0.35;eff=clamp(eff,-0.7,1);R.eff=lerp(R.eff,eff,1-Math.exp(-6*dt));
- R.speed=Math.max(0,R.speed+lv.aMax*R.eff*dt);R.dist+=R.speed*dt;
+ R.speed=Math.max(0,R.speed+lv.aMax*R.eff*dt);
+ // Tiempo mínimo de pista: sin autorización, la velocidad se limita a 0,97·VR
+ const toOk=R.calibrated&&R.t>=0.7*lv.rwTime;
+ if(!toOk&&R.speed>=lv.vr*0.97){R.speed=lv.vr*0.97;if(!R.holdMsg){R.holdMsg=true;impact('TORRE: MANTENGAN ESTABILIDAD, AUN SIN AUTORIZACIÓN DE DESPEGUE','warn');}}
+ R.dist+=R.speed*dt;
  // Obstáculos
  if(lv.obstacles&&R.t>=R.nextObs){spawnObstacle(R.spec);R.nextObs=R.t+rand(lv.obs[0],lv.obs[1]);}
  for(let i=obstacles.length-1;i>=0;i--){const o=obstacles[i];const prevZ=o.g.position.z;o.g.position.z+=R.speed*dt;if(o.g.userData.light)o.g.userData.light.visible=Math.sin(G.t*14)>0;
@@ -1828,7 +1833,7 @@ function runwayUpdate(dt){
  if(R.ooc){G.shake=Math.max(G.shake,0.5);if(G.t-R.lastBeep>0.33){R.lastBeep=G.t;AudioSys.beepNow();}if(!wasOOC)impact('FUERA DE CONTROL','warn','Proceso fuera de X̄ ± 3σ · pierdes empuje');setStateLbl('warn','PROCESO FUERA DE CONTROL');$('#alertFrame').className='on';}
  else{$('#alertFrame').className='';if(R.calibrated)setStateLbl('','EN CONTROL ESTADÍSTICO');}
  if(Math.abs(R.x)>R.spec){abortMission('spec');return;}
- if(R.speed>=lv.vr){beginRotation();return;}
+ if(toOk&&R.speed>=lv.vr){beginRotation();return;}
  if(R.dist>=lv.runLen){abortMission('pista');return;}
  hudRunway(lv);updateGauge(R.mx,R.spec,R.dispL,R.dispU);AudioSys.engine(R.speed/42,true);
  updateJetRunway(dt,R.speed);cameraChase(dt);
