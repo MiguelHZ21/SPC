@@ -153,11 +153,12 @@ let pgPending = false;
 
 async function initNeon() {
   if (!DATABASE_URL) return false;
+  const cleanUrl = DATABASE_URL.replace(/([?&])channel_binding=[^&]*(&|$)/g, '$1').replace(/[?&]$/, '');
   const { Pool } = require('pg');
   pgPool = new Pool({
-    connectionString: DATABASE_URL,
+    connectionString: cleanUrl,
     ssl: { rejectUnauthorized: false },
-    connectionTimeoutMillis: 10000
+    connectionTimeoutMillis: 15000
   });
 
   // 1. Crear tablas si no existen
