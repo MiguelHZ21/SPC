@@ -146,7 +146,22 @@ function loadStore() {
 }
 
 /* ---------- Neon / PostgreSQL (Recomendado en Render) ---------- */
-const DATABASE_URL = (process.env.DATABASE_URL || process.env.DATABASE_URI || process.env.POSTGRES_URL || process.env.POSTGRESQL_URL || process.env.NEON_DATABASE_URL || process.env.NEON_URL || '').trim();
+function getDatabaseUrl() {
+  const direct = process.env.DATABASE_URL || process.env.DATABASE_URI || process.env.POSTGRES_URL || process.env.POSTGRESQL_URL || process.env.NEON_DATABASE_URL || process.env.NEON_URL || '';
+  if (direct && typeof direct === 'string' && direct.trim().length > 0) return direct.trim();
+  for (const [k, v] of Object.entries(process.env)) {
+    if (typeof v === 'string') {
+      const match = v.match(/postgres(?:ql)?:\/\/[^\s"']+/);
+      if (match) return match[0];
+    }
+    if (typeof k === 'string' && k.includes('postgres')) {
+      const match = k.match(/postgres(?:ql)?:\/\/[^\s"']+/);
+      if (match) return match[0];
+    }
+  }
+  return '';
+}
+const DATABASE_URL = getDatabaseUrl();
 let pgPool = null;
 let pgTimer = null;
 let pgPending = false;
@@ -500,10 +515,12 @@ app.put('/api/config', (req, res) => {
 
 // 6. Estado de salud y diagnóstico
 app.get('/api/health', (req, res) => {
+  const envKeys = Object.keys(process.env).filter(k => !k.includes('SECRET') && !k.includes('PASS') && !k.includes('KEY'));
   res.json({
     status: 'ok',
     storage: pgPool ? 'Neon PostgreSQL' : (mongoCol ? 'MongoDB Atlas' : 'Archivo local'),
     databaseUrlFound: !!DATABASE_URL,
+    detectedEnvKeys: envKeys,
     serverTime: new Date().toISOString()
   });
 });
