@@ -516,12 +516,33 @@ app.put('/api/config', (req, res) => {
 });
 
 // 6. Estado de salud y diagnóstico
-app.get('/api/health', (req, res) => {
+app.get('/api/health', async (req, res) => {
   const envKeys = Object.keys(process.env).filter(k => !k.includes('SECRET') && !k.includes('PASS') && !k.includes('KEY'));
+  let neonStatus = null;
+  if (pgPool) {
+    neonStatus = { connected: true, writeOk: false };
+    try {
+      const uRes = await pgPool.query('SELECT current_user, current_database()');
+      neonStatus.user = uRes.rows[0].current_user;
+      neonStatus.database = uRes.rows[0].current_database;
+      // Probar escritura en app_config
+      await pgPool.query(`
+        INSERT INTO app_config (key, value, updated_at)
+        VALUES ('health_ping', '{"ok":true}'::jsonb, NOW())
+        ON CONFLICT (key) DO UPDATE SET value = '{"ok":true}'::jsonb, updated_at = NOW()
+      `);
+      neonStatus.writeOk = true;
+    } catch (e) {
+      neonStatus.writeOk = false;
+      neonStatus.error = e.message;
+    }
+  }
   res.json({
     status: 'ok',
     storage: pgPool ? 'Neon PostgreSQL' : (mongoCol ? 'MongoDB Atlas' : 'Archivo local'),
     databaseUrlFound: !!DATABASE_URL,
+    neon: neonStatus,
+    teamsCount: store.teams.length,
     detectedEnvKeys: envKeys,
     serverTime: new Date().toISOString()
   });
