@@ -1408,7 +1408,7 @@ const QX={
  {t:'Un Cpk de 1,33 equivale aproximadamente a un nivel sigma de…',o:['1σ','4σ (Z = 3 × Cpk)','6σ','0,5σ'],c:1,e:'Z = 3 × Cpk = 3 × 1,33 ≈ 4: el límite más cercano está a unas 4 desviaciones estándar de la media.'}]};
 LEVELS.forEach(l=>{l.bank=[l.q].concat(QX[l.n]);});
 const ATT_LABEL={practice:'PRÁCTICA 1',practice2:'PRÁCTICA 2',final:'DEFINITIVO'};
-function availableAttempts(team,n){const a=att(team,n);if(a.final)return[];if(!a.practice)return['practice'];const r=['final'];if(!a.practice2)r.unshift('practice2');return r;}
+function availableAttempts(team,n){const a=att(team,n);if(a.final)return[];if(!a.practice||a.practice.status==='en curso')return['practice'];const r=['final'];if(!a.practice2||a.practice2.status==='en curso')r.unshift('practice2');return r;}
 function pickQuestion(team,n){const lv=LEVELS[n-1];const a=att(team,n);const used=[a.practice,a.practice2].filter(x=>x&&x.qIdx!=null).map(x=>x.qIdx);let pool=lv.bank.map((_,i)=>i).filter(i=>!used.includes(i));if(!pool.length)pool=lv.bank.map((_,i)=>i);return pool[Math.floor(Math.random()*pool.length)];}
 
 /* ================= RENDER ================= */
@@ -1719,7 +1719,7 @@ const Store={mode:'local',teams:[],config:{},canWrite:true,listeners:[],db:null,
  async deleteTeam(id){if(this.mode==='server'){await this.api('DELETE','/api/teams/'+encodeURIComponent(id));this.teams=this.teams.filter(t=>t.id!==id);this.emit();this.pull();}else if(this.mode==='remote'){await this.db.doc('teams/'+id).delete();}else{this.teams=this.teams.filter(t=>t.id!==id);this.saveLocal();this.emit();}},
  async setConfig(obj){this.config=Object.assign({},this.config,obj);if(this.mode==='server'){await this.api('PUT','/api/config',this.config);}else if(this.mode==='remote'){await this.db.doc('config/main').set(this.config);}else this.saveLocal();}};
 function deepMerge(t,p){for(const k in p){const v=p[k];if(v&&typeof v==='object'&&!Array.isArray(v)){if(!t[k]||typeof t[k]!=='object')t[k]={};deepMerge(t[k],v);}else t[k]=v;}return t;}
-function att(team,n){return(team&&team.attempts&&team.attempts[n])||{};}
+function att(team,n){return(team&&team.attempts&&(team.attempts[n]||team.attempts[String(n)]))||{};}
 function isUnlocked(team,n){return!!(team&&team.unlocked&&team.unlocked[n]);}
 function nextAttemptType(team,n){const r=availableAttempts(team,n);return r.length?r[0]:null;}
 const PAINTS=[{n:'Negro Blackbird',c:0x17171d},{n:'Rojo Fuego',c:0xb3221c},{n:'Azul Cobalto',c:0x1f4fbf},{n:'Verde Militar',c:0x3f5f2a},{n:'Naranja Llama',c:0xd9661a},{n:'Morado Galaxia',c:0x5b2c9e},{n:'Dorado',c:0xc9a227},{n:'Blanco Ártico',c:0xdfe4ea},{n:'Turquesa',c:0x1c9c9c},{n:'Gris Plomo',c:0x5a6068},{n:'Rosa Neón',c:0xd23c8c},{n:'Vinotinto',c:0x6e1a2c}];
@@ -1727,7 +1727,7 @@ function teamPaint(t){return PAINTS[t&&t.color!=null&&PAINTS[t.color]?t.color:0]
 function pickColor(used){used=used||new Set(Store.teams.filter(t=>t.color!=null).map(t=>t.color));const free=PAINTS.map((_,i)=>i).filter(i=>!used.has(i));const pool=free.length?free:PAINTS.map((_,i)=>i);return pool[Math.floor(Math.random()*pool.length)];}
 function paintJet(t){if(jetPaint)jetPaint.color.setHex(teamPaint(t).c);}
 async function assignMissingColors(){if(!Store.canWrite)return;const used=new Set(Store.teams.filter(t=>t.color!=null).map(t=>t.color));for(const t of Store.teams.slice()){if(t.color==null){const c=pickColor(used);used.add(c);try{await Store.updateTeam(t.id,{color:c});}catch(e){}}}}
-function calcTotal(team){let s=0;for(let n=1;n<=5;n++){const f=att(team,n).final;if(f&&typeof f.score==='number')s+=f.score;}return s;}
+function calcTotal(team){let s=0;for(let n=1;n<=5;n++){const f=att(team,n).final;if(f&&typeof f.score==='number'&&isFinite(f.score)&&f.status==='completado')s+=Math.max(0,Math.round(f.score));}return s;}
 
 /* ================= ESTADO DEL JUEGO ================= */
 const G={state:'boot',paused:false,level:0,teamId:null,attemptType:'practice',timeScale:1,shake:0,flash:0,t:0,R:null,F:null,quiz:null,result:null,menuSel:0,camMode:'chase',idle:{a:0,off:0}};
@@ -2019,15 +2019,15 @@ async function finishLevel(success,reason){
  const vals=R.samples.map(s=>s.v);
  let lim=null;if(R.calibrated)lim={mean:R.mean,sigma:R.sigma,lcl:R.lcl,ucl:R.ucl,partial:false};else{const st=imr(vals);if(st){const sg=Math.max(0.25,st.sigma);lim={mean:st.mean,sigma:sg,lcl:st.mean-3*sg,ucl:st.mean+3*sg,partial:true};}}
  const cap=capability(vals,R.spec);
- let inCtrl=null,oocTotal=0,inCtrlN=0;if(lim){let n=0;R.samples.forEach((s,i)=>{const o=s.v>lim.ucl||s.v<lim.lcl;s.oocR=o;if(o)oocTotal++;if(i>=20||lim.partial){n++;if(!o)inCtrlN++;}});inCtrl=n?inCtrlN/n*100:null;}
+ let inCtrl=null,oocTotal=0,inCtrlN=0;if(lim){let n=0;R.samples.forEach(s=>{const o=s.v>lim.ucl||s.v<lim.lcl;s.oocR=o;if(o)oocTotal++;n++;if(!o)inCtrlN++;});inCtrl=n?Math.round(inCtrlN/n*100):null;}
  const fcap=F?capability(F.samples.map(s=>s.v),3):null;if(F)F.samples.forEach(s=>s.oocR=Math.abs(s.v)>3);
  const E=F?F.eng:null;
- const pCpk=cap&&R.tookOff?Math.round(clamp(cap.cpk,0,3)*200):0;
+ const pCpk=cap&&R.tookOff&&isFinite(cap.cpk)?Math.round(clamp(cap.cpk,0,3)*200):0;
  const parts=[['Pista · muestras en control ('+inCtrlN+' × 15)',inCtrlN*15],['Pista · capacidad (Cpk × 200, máx. 600, solo si despega)',pCpk],['Despegue · VR alcanzada',R.tookOff?500:0],['Control de Misión · pregunta SPC',G.quiz&&G.quiz.correct?500:0]];
- if(F){parts.push(['Piloto · anillos atravesados ('+F.ringsHit+' × 100)',F.ringsHit*100]);parts.push(['Piloto · estabilidad cerca de 0σ',Math.max(0,Math.round(F.stab))]);
+ if(F){parts.push(['Piloto · anillos atravesados ('+F.ringsHit+' × 100)',F.ringsHit*100]);parts.push(['Piloto · estabilidad cerca de 0σ',Math.max(0,Math.round(isFinite(F.stab)?F.stab:0))]);
   parts.push(['Copiloto · causas especiales detectadas ('+E.hit+' × 150)',E.hit*150]);parts.push(['Copiloto · señales no detectadas ('+E.miss+' × −50)',-E.miss*50]);parts.push(['Copiloto · falsas alarmas ('+E.fa+' × −30)',-E.fa*30]);}
  parts.push(['Misión completada',success?300:0]);
- const score=Math.max(0,parts.reduce((a,p)=>a+p[1],0));
+ const score=Math.max(0,parts.reduce((a,p)=>a+(isFinite(p[1])?p[1]:0),0));
  G.result={success,reason,score,cap,fcap,inCtrl,oocTotal,lim,parts,date:new Date()};
  const type=G.attemptType;let saved=false;const team=Store.team(G.teamId);
  if(team){const rec={status:'completado',score,success,reason,cpk:cap&&isFinite(cap.cpk)?Math.round(cap.cpk*100)/100:null,cp:cap&&isFinite(cap.cp)?Math.round(cap.cp*100)/100:null,inCtrl:inCtrl!=null?Math.round(inCtrl):null,quiz:!!(G.quiz&&G.quiz.correct),qIdx:G.qIdx,rings:F?F.ringsHit+'/'+F.ringsTot:null,signals:E?{hit:E.hit,miss:E.miss,fa:E.fa}:null,endedAt:new Date().toISOString()};
@@ -2200,8 +2200,10 @@ function buildTeamSelect(){const sel=$('#inTeam');const cur=G.teamId;sel.innerHT
  if(cur&&teams.some(t=>t.id===cur))sel.value=cur;else{const last=lsGet('mbc_lastTeam',null);sel.value=teams.some(t=>t.id===last)?last:teams[0].id;}G.teamId=sel.value;}
 $('#inTeam').onchange=()=>{G.teamId=$('#inTeam').value;lsSet('mbc_lastTeam',G.teamId);buildLevels();};
 function levelStatus(team,n){if(!team)return{txt:'Selecciona equipo',cls:''};if(!isUnlocked(team,n))return{txt:'Bloqueado',cls:''};const a=att(team,n);
- if(a.final){if(a.final.status==='completado')return{txt:'Definitivo: '+a.final.score.toLocaleString('es-CO')+' pts',cls:'ok'};return{txt:'Definitivo perdido',cls:''};}
- if(a.practice2)return{txt:'Prácticas 2/2 · falta definitivo',cls:'pend'};if(a.practice)return{txt:'Práctica 1/2 · falta definitivo',cls:'pend'};return{txt:'Disponible: práctica',cls:'pend'};}
+ if(a.final){if(a.final.status==='completado')return{txt:'Definitivo: '+(a.final.score||0).toLocaleString('es-CO')+' pts',cls:'ok'};return{txt:'Definitivo perdido',cls:''};}
+ if(a.practice2&&a.practice2.status==='completado'){const sc=typeof a.practice2.score==='number'?a.practice2.score.toLocaleString('es-CO')+' pts':'completada';return{txt:'Práctica 2: '+sc+' · falta definitivo',cls:'pend'};}
+ if(a.practice&&a.practice.status==='completado'){const sc=typeof a.practice.score==='number'?a.practice.score.toLocaleString('es-CO')+' pts':'completada';return{txt:'Práctica 1: '+sc+' · falta definitivo',cls:'pend'};}
+ return{txt:'Disponible: práctica',cls:'pend'};}
 function updatePaintUI(){const t=selTeam();const el=$('#teamPaint');el.innerHTML='';if(!t)return;const p=teamPaint(t);const sw=document.createElement('span');sw.style.cssText='display:inline-block;width:14px;height:14px;border-radius:3px;vertical-align:-2px;margin-right:6px;border:1px solid rgba(255,255,255,.5);background:#'+p.c.toString(16).padStart(6,'0');el.appendChild(sw);el.appendChild(document.createTextNode('Aeronave asignada: '+p.n));paintJet(t);}
 function buildLevels(){updatePaintUI();const box=$('#levels');box.innerHTML='';const team=selTeam();
  LEVELS.forEach((lv,i)=>{const b=document.createElement('button');b.type='button';const un=isUnlocked(team,lv.n);b.className='lvl'+(i===G.menuSel?' sel':'')+(un?'':' locked');
@@ -2216,8 +2218,11 @@ function updateMenuInfo(){const team=selTeam(),lv=LEVELS[G.menuSel];const info=$
  const av=availableAttempts(team,lv.n);
  if(!av.length){const f=att(team,lv.n).final;info.textContent=f&&f.status==='completado'?'Nivel '+lv.n+' completado. Puntaje definitivo: '+(f.score||0).toLocaleString('es-CO')+' pts.':'El intento definitivo quedó abandonado o en curso. Solo Calidad puede reiniciarlo.';bs.disabled=true;bs.textContent='COMPLETADO';return;}
  bs.disabled=false;
+ const a=att(team,lv.n);
+ const bestPrac=Math.max((a.practice&&a.practice.status==='completado'&&typeof a.practice.score==='number')?a.practice.score:0,(a.practice2&&a.practice2.status==='completado'&&typeof a.practice2.score==='number')?a.practice2.score:0);
+ const pMsg=bestPrac>0?' Última práctica: '+bestPrac.toLocaleString('es-CO')+' pts (entrenamiento).':'';
  if(av[0]==='practice'){bs.textContent='JUGAR PRÁCTICA 1';info.textContent='Nivel '+lv.n+' · '+lv.tema+'. Práctica 1 de 2 (no suma puntos).';}
- else{bs.textContent='JUGAR DEFINITIVO';if(av.includes('practice2'))b2.classList.remove('hidden');info.textContent='Nivel '+lv.n+' · '+lv.tema+'. '+(av.includes('practice2')?'Pueden hacer la práctica 2 o jugar el intento DEFINITIVO.':'Prácticas usadas. Solo queda el intento DEFINITIVO, que cuenta para el ranking.');}}
+ else{bs.textContent='JUGAR DEFINITIVO';if(av.includes('practice2'))b2.classList.remove('hidden');info.textContent='Nivel '+lv.n+' · '+lv.tema+'.'+pMsg+' '+(av.includes('practice2')?'Pueden hacer la práctica 2 o jugar el intento DEFINITIVO.':'Prácticas usadas. Solo queda el intento DEFINITIVO, que cuenta para el ranking.');}}
 function buildRanking(){const box=$('#rank');box.innerHTML='';
  const list=Store.teams.map(t=>({t,tot:calcTotal(t),lv:[1,2,3,4,5].filter(n=>att(t,n).final&&att(t,n).final.status==='completado').length})).sort((a,b)=>b.tot-a.tot||b.lv-a.lv||a.t.name.localeCompare(b.t.name));
  if(!list.length){const p=document.createElement('div');p.className='muted';p.style.fontSize='.85em';p.textContent='Aún no hay equipos registrados';box.appendChild(p);return;}
@@ -2262,7 +2267,7 @@ async function admLogin(){const pin=$('#admPin').value.trim();if(!/^\d{4,8}$/.te
  else if(Store.config.pinHash!==h){$('#admLoginMsg').textContent='PIN incorrecto.';return;}
  admOpen=true;hide('#admLogin');show('#admBody');renderAdmin();}
 $('#admPinOk').onclick=admLogin;$('#admPin').addEventListener('keydown',e=>{if(e.key==='Enter')admLogin();});
-function cellTxt(t,n){if(!isUnlocked(t,n))return'—';const a=att(t,n);if(a.final){return a.final.status==='completado'?a.final.score.toLocaleString('es-CO'):'EC';}if(a.practice2)return a.practice2.status==='completado'?'P2':'EC';if(a.practice)return a.practice.status==='completado'?'P1':'EC';return'A';}
+function cellTxt(t,n){if(!isUnlocked(t,n))return'—';const a=att(t,n);if(a.final){return a.final.status==='completado'?(a.final.score||0).toLocaleString('es-CO'):'EC';}if(a.practice2&&a.practice2.status==='completado')return 'P2 ('+(a.practice2.score||0).toLocaleString('es-CO')+')';if(a.practice&&a.practice.status==='completado')return 'P1 ('+(a.practice.score||0).toLocaleString('es-CO')+')';return'A';}
 function renderAdmin(){const tb=$('#admRows');tb.innerHTML='';const teams=[...Store.teams].sort((a,b)=>a.name.localeCompare(b.name));
  if(!teams.length){const tr=document.createElement('tr');const td=document.createElement('td');td.colSpan=9;td.className='muted';td.textContent='Aún no hay equipos registrados.';tr.appendChild(td);tb.appendChild(tr);return;}
  teams.forEach(t=>{const tr=document.createElement('tr');const add=(txt)=>{const td=document.createElement('td');td.textContent=txt;tr.appendChild(td);return td;};add(t.name+' · '+teamPaint(t).n);for(let n=1;n<=5;n++)add(cellTxt(t,n));add(calcTotal(t).toLocaleString('es-CO'));

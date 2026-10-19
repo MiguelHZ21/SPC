@@ -175,9 +175,10 @@ function sanitizeForCSV(str) {
 function calcTotal(team) {
   let s = 0;
   for (let n = 1; n <= 5; n++) {
-    const f = team.attempts && team.attempts[n] && team.attempts[n].final;
-    if (f && typeof f.score === 'number' && f.status === 'completado') {
-      s += f.score;
+    const attObj = team.attempts && (team.attempts[n] || team.attempts[String(n)]);
+    const f = attObj && attObj.final;
+    if (f && typeof f.score === 'number' && isFinite(f.score) && f.status === 'completado') {
+      s += Math.max(0, Math.round(f.score));
     }
   }
   return s;
@@ -255,8 +256,8 @@ app.put('/api/teams/:id', (req, res) => {
         ['practice', 'practice2', 'final'].forEach(type => {
           const a = attObj[type];
           if (a && typeof a === 'object') {
-            if (typeof a.score === 'number') {
-              a.score = Math.max(0, Math.min(5000, Math.round(a.score)));
+            if (typeof a.score === 'number' && isFinite(a.score)) {
+              a.score = Math.max(0, Math.min(20000, Math.round(a.score)));
             }
           }
         });
@@ -432,7 +433,7 @@ app.post('/api/quiz/submit', (req, res) => {
 app.post('/api/attempts/start', (req, res) => {
   const { teamId, level, attemptType } = req.body;
   const lvl = parseInt(level, 10);
-  if (!teamId || !lvl || !['practice', 'final'].includes(attemptType)) {
+  if (!teamId || !lvl || !['practice', 'practice2', 'final'].includes(attemptType)) {
     return res.status(400).json({ error: 'Parámetros inválidos' });
   }
 
@@ -444,7 +445,7 @@ app.post('/api/attempts/start', (req, res) => {
   }
 
   if (!team.attempts) team.attempts = {};
-  if (!team.attempts[lvl]) team.attempts[lvl] = { practice: null, final: null };
+  if (!team.attempts[lvl]) team.attempts[lvl] = { practice: null, practice2: null, final: null };
 
   const currentAtt = team.attempts[lvl][attemptType];
   if (currentAtt && currentAtt.status === 'completado') {
@@ -496,14 +497,18 @@ app.post('/api/attempts/finish', (req, res) => {
   const pCtrl = inCtrlN * 15;
 
   const cpkVal = typeof stats.cpk === 'number' && isFinite(stats.cpk) ? stats.cpk : null;
-  const pCpk = cpkVal ? Math.round(Math.max(0, Math.min(3, cpkVal)) * 200) : 0;
+  const pCpk = (cpkVal && stats.tookOff) ? Math.round(Math.max(0, Math.min(3, cpkVal)) * 200) : 0;
 
   const pTake = stats.tookOff ? 500 : 0;
   const pQuiz = stats.quizCorrect ? 500 : 0;
+  const pRings = (parseInt(stats.ringsHit, 10) || 0) * 100;
   const pFlight = Math.max(0, Math.min(1500, Math.round(stats.stab || 0)));
+  const pSignalsHit = (parseInt(stats.signalsHit, 10) || 0) * 150;
+  const pSignalsMiss = (parseInt(stats.signalsMiss, 10) || 0) * -50;
+  const pSignalsFa = (parseInt(stats.signalsFa, 10) || 0) * -30;
   const pFinish = stats.success ? 300 : 0;
 
-  const totalScore = Math.max(0, pCtrl + pCpk + pTake + pQuiz + pFlight + pFinish);
+  const totalScore = Math.max(0, pCtrl + pCpk + pTake + pQuiz + pRings + pFlight + pSignalsHit + pSignalsMiss + pSignalsFa + pFinish);
 
   if (!team.attempts) team.attempts = {};
   if (!team.attempts[level]) team.attempts[level] = {};
@@ -616,7 +621,7 @@ app.post('/api/admin/teams/:id/reset-attempt', authAdmin, (req, res) => {
   if (!team) return res.status(404).json({ error: 'Equipo no encontrado' });
 
   if (team.attempts && team.attempts[lvl]) {
-    team.attempts[lvl] = { practice: null, final: null };
+    team.attempts[lvl] = { practice: null, practice2: null, final: null };
     team.total = calcTotal(team);
     saveStore();
   }
