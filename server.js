@@ -176,47 +176,49 @@ async function initNeon() {
     connectionTimeoutMillis: 15000
   });
 
-  // 1. Crear tablas si no existen
-  await pgPool.query(`
-    CREATE TABLE IF NOT EXISTS teams (
-      id VARCHAR(50) PRIMARY KEY,
-      name VARCHAR(100) NOT NULL,
-      shift VARCHAR(50) DEFAULT '',
-      color INT DEFAULT 0,
-      total INT DEFAULT 0,
-      unlocked JSONB DEFAULT '{}'::jsonb,
-      attempts JSONB DEFAULT '{}'::jsonb,
-      created_at TIMESTAMPTZ DEFAULT NOW(),
-      updated_at TIMESTAMPTZ DEFAULT NOW()
-    );
-    CREATE INDEX IF NOT EXISTS idx_teams_total ON teams (total DESC);
-
-    CREATE TABLE IF NOT EXISTS app_config (
-      key VARCHAR(50) PRIMARY KEY,
-      value JSONB NOT NULL,
-      updated_at TIMESTAMPTZ DEFAULT NOW()
-    );
-
-    CREATE TABLE IF NOT EXISTS attempt_logs (
-      id SERIAL PRIMARY KEY,
-      team_id VARCHAR(50) REFERENCES teams(id) ON DELETE CASCADE,
-      level INT NOT NULL,
-      attempt_type VARCHAR(20) NOT NULL,
-      status VARCHAR(20) NOT NULL,
-      score INT DEFAULT 0,
-      success BOOLEAN DEFAULT FALSE,
-      reason VARCHAR(50),
-      cpk NUMERIC(6,2),
-      cp NUMERIC(6,2),
-      in_ctrl INT,
-      quiz BOOLEAN,
-      rings VARCHAR(20),
-      signals JSONB,
-      started_at TIMESTAMPTZ,
-      ended_at TIMESTAMPTZ
-    );
-    CREATE INDEX IF NOT EXISTS idx_attempt_logs_team_level ON attempt_logs (team_id, level);
-  `);
+  // 1. Crear tablas si no existen (sin fallar si ya existen y el rol no es owner de índices)
+  try {
+    await pgPool.query(`
+      CREATE TABLE IF NOT EXISTS teams (
+        id VARCHAR(50) PRIMARY KEY,
+        name VARCHAR(100) NOT NULL,
+        shift VARCHAR(50) DEFAULT '',
+        color INT DEFAULT 0,
+        total INT DEFAULT 0,
+        unlocked JSONB DEFAULT '{}'::jsonb,
+        attempts JSONB DEFAULT '{}'::jsonb,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      );
+      CREATE TABLE IF NOT EXISTS app_config (
+        key VARCHAR(50) PRIMARY KEY,
+        value JSONB NOT NULL,
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      );
+      CREATE TABLE IF NOT EXISTS attempt_logs (
+        id SERIAL PRIMARY KEY,
+        team_id VARCHAR(50) REFERENCES teams(id) ON DELETE CASCADE,
+        level INT NOT NULL,
+        attempt_type VARCHAR(20) NOT NULL,
+        status VARCHAR(20) NOT NULL,
+        score INT DEFAULT 0,
+        success BOOLEAN DEFAULT FALSE,
+        reason VARCHAR(50),
+        cpk NUMERIC(6,2),
+        cp NUMERIC(6,2),
+        in_ctrl INT,
+        quiz BOOLEAN,
+        rings VARCHAR(20),
+        signals JSONB,
+        started_at TIMESTAMPTZ,
+        ended_at TIMESTAMPTZ
+      );
+    `);
+    try { await pgPool.query(`CREATE INDEX IF NOT EXISTS idx_teams_total ON teams (total DESC);`); } catch (e) {}
+    try { await pgPool.query(`CREATE INDEX IF NOT EXISTS idx_attempt_logs_team_level ON attempt_logs (team_id, level);`); } catch (e) {}
+  } catch (ddlErr) {
+    console.log('ℹ️ Las tablas ya están creadas en Neon, procediendo con lectura...');
+  }
 
   // 2. Cargar configuración
   const configRes = await pgPool.query('SELECT value FROM app_config WHERE key = $1', ['main']);
