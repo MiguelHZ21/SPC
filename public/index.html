@@ -2318,11 +2318,30 @@
 				<div class="card">
 					<h1 class="title1">MISIÓN<br>BAJO CONTROL</h1>
 					<div class="title2 disp">Rumbo a 6σ</div>
-					<p class="title3">Semana de la Calidad 2026 · Control Estadístico de Procesos. Cada día la yincana
-						entrega una ficha con el código que desbloquea la misión del día.</p>
-					<label class="k" for="inTeam">EQUIPO AUTÓNOMO</label>
-					<select id="inTeam"></select>
-					<div id="teamPaint" class="muted" style="margin-top:6px;font-size:.9em"></div>
+					<p class="title3">Semana de la Calidad 2026 · Control Estadístico de Procesos. Inicia sesión con tu equipo. Supera la meta de puntaje y responde bien la pregunta SPC para desbloquear el siguiente nivel.</p>
+					
+					<!-- Bloque de Inicio de Sesión de Equipo -->
+					<div id="teamLoggedOutBox" style="background:rgba(0,0,0,.35);padding:12px;border-radius:8px;border:1px solid rgba(255,255,255,.1);margin-bottom:12px">
+						<label class="k" for="inTeam" style="margin-top:0">SELECCIONA TU EQUIPO</label>
+						<select id="inTeam" style="width:100%;margin-bottom:8px"></select>
+						<div class="row" style="gap:8px">
+							<input type="password" id="teamPassIn" placeholder="Contraseña (spc2026)" autocomplete="current-password" style="flex:1;min-width:140px;padding:9px 12px;background:rgba(0,0,0,.5);border:1px solid rgba(255,255,255,.2);color:#fff;border-radius:6px;font-family:inherit;font-size:0.95em">
+							<button class="btn" id="bTeamLogin" type="button" style="padding:9px 16px">INGRESAR</button>
+						</div>
+						<div id="teamLoginMsg" style="font-size:0.85em;margin-top:6px;color:var(--warn);min-height:1.2em"></div>
+					</div>
+
+					<!-- Bloque de Equipo Autenticado -->
+					<div id="teamLoggedInBox" class="hidden" style="margin-bottom:12px">
+						<div style="display:flex;justify-content:space-between;align-items:center;background:rgba(111,247,201,.08);padding:10px 14px;border:1px solid rgba(111,247,201,.3);border-radius:8px">
+							<div>
+								<div class="k" style="font-size:0.7em;color:var(--cyan);margin:0;letter-spacing:1px">EQUIPO AUTENTICADO</div>
+								<div id="activeTeamName" style="font-weight:bold;font-size:1.15em;color:#fff"></div>
+							</div>
+							<button class="btn sm ghost" id="bTeamLogout" type="button" style="color:var(--cyan);border-color:rgba(95,227,255,.4)">CAMBIAR EQUIPO</button>
+						</div>
+						<div id="teamPaint" class="muted" style="margin-top:6px;font-size:.9em"></div>
+					</div>
 					<label class="k">MISIONES</label>
 					<div class="levels" id="levels"></div>
 					<div id="lvlInfo" class="muted"></div>
@@ -2928,7 +2947,8 @@
 			};
 			function deepMerge(t, p) { for (const k in p) { const v = p[k]; if (v && typeof v === 'object' && !Array.isArray(v)) { if (!t[k] || typeof t[k] !== 'object') t[k] = {}; deepMerge(t[k], v); } else t[k] = v; } return t; }
 			function att(team, n) { return (team && team.attempts && (team.attempts[n] || team.attempts[String(n)])) || {}; }
-			function isUnlocked(team, n) { return !!(team && team.unlocked && team.unlocked[n]); }
+			const PASS_THRESHOLDS = { 1: 800, 2: 1000, 3: 1200, 4: 1400, 5: 1600 };
+			function isUnlocked(team, n) { if (n === 1) return true; return !!(team && team.unlocked && (team.unlocked[n] || team.unlocked[String(n)])); }
 			function nextAttemptType(team, n) { const r = availableAttempts(team, n); return r.length ? r[0] : null; }
 			const PAINTS = [{ n: 'Negro Blackbird', c: 0x17171d }, { n: 'Rojo Fuego', c: 0xb3221c }, { n: 'Azul Cobalto', c: 0x1f4fbf }, { n: 'Verde Militar', c: 0x3f5f2a }, { n: 'Naranja Llama', c: 0xd9661a }, { n: 'Morado Galaxia', c: 0x5b2c9e }, { n: 'Dorado', c: 0xc9a227 }, { n: 'Blanco Ártico', c: 0xdfe4ea }, { n: 'Turquesa', c: 0x1c9c9c }, { n: 'Gris Plomo', c: 0x5a6068 }, { n: 'Rosa Neón', c: 0xd23c8c }, { n: 'Vinotinto', c: 0x6e1a2c }];
 			function teamPaint(t) { return PAINTS[t && t.color != null && PAINTS[t.color] ? t.color : 0]; }
@@ -3311,16 +3331,38 @@
 				const score = Math.max(0, parts.reduce((a, p) => a + (isFinite(p[1]) ? p[1] : 0), 0));
 				G.result = { success, reason, score, cap, fcap, inCtrl, oocTotal, lim, parts, date: new Date() };
 				const type = G.attemptType; let saved = false; const team = Store.team(G.teamId);
+				const minScore = PASS_THRESHOLDS[lv.n] || 800;
+				const quizOk = !!(G.quiz && G.quiz.correct);
+				const levelPassed = success && quizOk && (score >= minScore);
+				let unlockedNext = false;
+
 				if (team) {
-					const rec = { status: 'completado', score, success, reason, cpk: cap && isFinite(cap.cpk) ? Math.round(cap.cpk * 100) / 100 : null, cp: cap && isFinite(cap.cp) ? Math.round(cap.cp * 100) / 100 : null, inCtrl: inCtrl != null ? Math.round(inCtrl) : null, quiz: !!(G.quiz && G.quiz.correct), qIdx: G.qIdx, rings: F ? F.ringsHit + '/' + F.ringsTot : null, signals: E ? { hit: E.hit, miss: E.miss, fa: E.fa } : null, endedAt: new Date().toISOString() };
-					const patch = { attempts: { [lv.n]: { [type]: rec } } }; if (type === 'final') { const tmp = JSON.parse(JSON.stringify(team)); deepMerge(tmp, patch); patch.total = calcTotal(tmp); }
+					const rec = { status: 'completado', score, success, reason, cpk: cap && isFinite(cap.cpk) ? Math.round(cap.cpk * 100) / 100 : null, cp: cap && isFinite(cap.cp) ? Math.round(cap.cp * 100) / 100 : null, inCtrl: inCtrl != null ? Math.round(inCtrl) : null, quiz: quizOk, passed: levelPassed, minScore, qIdx: G.qIdx, rings: F ? F.ringsHit + '/' + F.ringsTot : null, signals: E ? { hit: E.hit, miss: E.miss, fa: E.fa } : null, endedAt: new Date().toISOString() };
+					const patch = { attempts: { [lv.n]: { [type]: rec } } };
+					if (!team.unlocked) team.unlocked = {};
+					team.unlocked[1] = true;
+					if (levelPassed && lv.n < 5) {
+						team.unlocked[lv.n + 1] = true;
+						patch.unlocked = Object.assign({}, team.unlocked, { [lv.n + 1]: true });
+						unlockedNext = true;
+					}
+					if (type === 'final') { const tmp = JSON.parse(JSON.stringify(team)); deepMerge(tmp, patch); patch.total = calcTotal(tmp); }
 					try { await Store.updateTeam(team.id, patch); saved = true; } catch (e) { saved = false; }
 				}
 				hide('#hud'); hide('#bPause');
 				$('#rSub').textContent = 'REPORTE DE MISIÓN · NIVEL ' + lv.n + ' · ' + lv.dia.toUpperCase() + ' · ' + lv.tema.toUpperCase() + (team ? ' · ' + team.name : '');
 				const titles = { ok: 'MISIÓN CUMPLIDA', spec: 'DESPEGUE ABORTADO', pista: 'PISTA AGOTADA', crash: 'AVIÓN DESPLOMADO', abandon: 'INTENTO ABANDONADO' };
 				const tt = $('#rTitle'); tt.textContent = titles[reason] || 'FIN DE MISIÓN'; tt.style.color = success ? 'var(--hud)' : 'var(--danger)';
-				const bd = $('#rBadge'); bd.className = type === 'final' ? '' : 'prac'; bd.textContent = type === 'final' ? (saved ? 'INTENTO DEFINITIVO · REGISTRADO' : 'INTENTO DEFINITIVO · NO SE PUDO GUARDAR, AVISA A CALIDAD') : ATT_LABEL[type] + ' · NO SUMA AL RANKING';
+				const bd = $('#rBadge'); bd.className = type === 'final' ? '' : 'prac';
+				let badgeTxt = type === 'final' ? (saved ? 'INTENTO DEFINITIVO · REGISTRADO' : 'INTENTO DEFINITIVO · NO SE PUDO GUARDAR') : ATT_LABEL[type] + ' · NO SUMA AL RANKING';
+				if (levelPassed) {
+					badgeTxt += (lv.n < 5 ? ' · 🎉 ¡NIVEL ' + lv.n + ' APROBADO! NIVEL ' + (lv.n + 1) + ' DESBLOQUEADO' : ' · 🏆 ¡CERTIFICACIÓN SPC COMPLETADA!');
+				} else {
+					if (!quizOk) badgeTxt += ' · ⚠️ PREGUNTA SPC INCORRECTA (OBLIGATORIA PARA PASAR)';
+					else if (score < minScore) badgeTxt += ' · ⚠️ PUNTAJE INSUFICIENTE (META: ' + minScore.toLocaleString('es-CO') + ' PTS)';
+					else if (!success) badgeTxt += ' · ⚠️ VUELO NO COMPLETADO CON ÉXITO';
+				}
+				bd.textContent = badgeTxt;
 				$('#rScore').textContent = score.toLocaleString('es-CO');
 				const st = $('#rStats'); st.innerHTML = ''; const capOK = cap && cap.cpk >= 1.33;
 				const items = [['X̄ pista', fmt(cap && cap.mean)], ['σ pista', fmt(cap && cap.sigma)], ['Cp', fmtCap(cap && cap.cp), cap && cap.cp < 1.33 ? 'warn' : ''], ['Cpk (meta ≥ 1,33)', fmtCap(cap && cap.cpk), !cap ? '' : capOK ? '' : cap.cpk < 1 ? 'bad' : 'warn'], ['Nivel σ', cap ? fmt(cap.z, 1) : '—', cap && cap.z < 4 ? 'warn' : ''], ['% en control', inCtrl != null ? fmt(inCtrl, 0) + '%' : '—', inCtrl != null && inCtrl < 90 ? 'warn' : ''], ['Obstáculos golpeados', String(R.hits), R.hits ? 'warn' : '']];
@@ -3489,22 +3531,102 @@
 			}
 
 			/* ================= MENÚ ================= */
-			function selTeam() { return Store.team(G.teamId); }
-			function buildTeamSelect() {
-				const sel = $('#inTeam'); const cur = G.teamId; sel.innerHTML = ''; const teams = [...Store.teams].sort((a, b) => a.name.localeCompare(b.name));
-				if (!teams.length) { const o = document.createElement('option'); o.value = ''; o.textContent = '— Calidad aún no registra equipos —'; sel.appendChild(o); G.teamId = null; return; }
-				teams.forEach(t => { const o = document.createElement('option'); o.value = t.id; o.textContent = t.name; sel.appendChild(o); });
-				if (cur && teams.some(t => t.id === cur)) sel.value = cur; else { const last = lsGet('mbc_lastTeam', null); sel.value = teams.some(t => t.id === last) ? last : teams[0].id; } G.teamId = sel.value;
+			function selTeam() { return G.teamId ? Store.team(G.teamId) : null; }
+			function restoreTeamSession() {
+				try {
+					const raw = localStorage.getItem('mbc_team_session');
+					if (raw) {
+						const sess = JSON.parse(raw);
+						if (sess && sess.teamId && Store.team(sess.teamId)) {
+							G.teamId = sess.teamId;
+							return true;
+						}
+					}
+				} catch (e) { }
+				G.teamId = null;
+				return false;
 			}
-			$('#inTeam').onchange = () => { G.teamId = $('#inTeam').value; lsSet('mbc_lastTeam', G.teamId); buildLevels(); };
+			function updateTeamAuthUI() {
+				const team = selTeam();
+				const outBox = $('#teamLoggedOutBox');
+				const inBox = $('#teamLoggedInBox');
+				if (team) {
+					if (outBox) outBox.classList.add('hidden');
+					if (inBox) inBox.classList.remove('hidden');
+					const nm = $('#activeTeamName');
+					if (nm) nm.textContent = team.name + (team.shift ? ' · ' + team.shift : '');
+					updatePaintUI();
+				} else {
+					if (inBox) inBox.classList.add('hidden');
+					if (outBox) outBox.classList.remove('hidden');
+					const tp = $('#teamPaint');
+					if (tp) tp.innerHTML = '';
+				}
+			}
+			async function doTeamLogin() {
+				const sel = $('#inTeam');
+				const teamId = sel.value;
+				const pass = $('#teamPassIn').value.trim();
+				const msg = $('#teamLoginMsg');
+				msg.textContent = '';
+				if (!teamId) { msg.textContent = 'Selecciona un equipo de la lista.'; return; }
+				if (!pass) { msg.textContent = 'Ingresa la contraseña del equipo.'; $('#teamPassIn').focus(); return; }
+				try {
+					const res = await fetch('/api/team/login', {
+						method: 'POST',
+						headers: { 'Content-Type': 'application/json' },
+						body: JSON.stringify({ teamId, password: pass })
+					});
+					const data = await res.json();
+					if (!res.ok || !data.success) {
+						msg.textContent = data.error || 'Contraseña incorrecta.';
+						AudioSys.click('C4');
+						return;
+					}
+					localStorage.setItem('mbc_team_session', JSON.stringify({ teamId, token: data.token }));
+					G.teamId = teamId;
+					$('#teamPassIn').value = '';
+					msg.textContent = '';
+					toast('¡Bienvenido, ' + data.team.name + '!', 'ok', 3000);
+					AudioSys.fanfare();
+					await Store.pull();
+					updateTeamAuthUI();
+					buildLevels();
+					buildRanking();
+				} catch (e) {
+					msg.textContent = 'Error al verificar con el servidor de planta.';
+				}
+			}
+			function doTeamLogout() {
+				localStorage.removeItem('mbc_team_session');
+				G.teamId = null;
+				updateTeamAuthUI();
+				buildLevels();
+				toast('Sesión de equipo cerrada', 'info', 2000);
+			}
+			function buildTeamSelect() {
+				const sel = $('#inTeam'); const teams = [...Store.teams].sort((a, b) => a.name.localeCompare(b.name)); sel.innerHTML = '';
+				if (!teams.length) { const o = document.createElement('option'); o.value = ''; o.textContent = '— Calidad aún no registra equipos —'; sel.appendChild(o); G.teamId = null; updateTeamAuthUI(); return; }
+				teams.forEach(t => { const o = document.createElement('option'); o.value = t.id; o.textContent = t.name + (t.shift ? ' (' + t.shift + ')' : ''); sel.appendChild(o); });
+				if (restoreTeamSession()) {
+					sel.value = G.teamId;
+				} else {
+					sel.value = teams[0].id;
+				}
+				updateTeamAuthUI();
+			}
+			$('#inTeam').onchange = () => { /* selección manual de equipo */ };
+			$('#bTeamLogin').onclick = doTeamLogin;
+			$('#teamPassIn').addEventListener('keydown', e => { if (e.key === 'Enter') doTeamLogin(); });
+			$('#bTeamLogout').onclick = doTeamLogout;
 			function levelStatus(team, n) {
-				if (!team) return { txt: 'Selecciona equipo', cls: '' }; if (!isUnlocked(team, n)) return { txt: 'Bloqueado', cls: '' }; const a = att(team, n);
+				if (!team) return { txt: 'Inicia sesión', cls: '' }; if (!isUnlocked(team, n)) return { txt: 'Bloqueado', cls: '' }; const a = att(team, n);
 				const dbScore = (typeof team['score_l' + n] === 'number' && team['score_l' + n] > 0) ? team['score_l' + n] : ((a.final && typeof a.final.score === 'number' && a.final.status === 'completado') ? a.final.score : null);
 				if (dbScore != null) return { txt: 'Definitivo: ' + dbScore.toLocaleString('es-CO') + ' pts', cls: 'ok' };
 				if (a.final && a.final.status !== 'completado') return { txt: 'Definitivo perdido', cls: '' };
 				if (a.practice2 && a.practice2.status === 'completado') { const sc = typeof a.practice2.score === 'number' ? a.practice2.score.toLocaleString('es-CO') + ' pts' : 'completada'; return { txt: 'Práctica 2: ' + sc + ' · falta definitivo', cls: 'pend' }; }
 				if (a.practice && a.practice.status === 'completado') { const sc = typeof a.practice.score === 'number' ? a.practice.score.toLocaleString('es-CO') + ' pts' : 'completada'; return { txt: 'Práctica 1: ' + sc + ' · falta definitivo', cls: 'pend' }; }
-				return { txt: 'Disponible: práctica', cls: 'pend' };
+				return { txt: 'Disponible', cls: 'pend' };
 			}
 			function updatePaintUI() { const t = selTeam(); const el = $('#teamPaint'); el.innerHTML = ''; if (!t) return; const p = teamPaint(t); const sw = document.createElement('span'); sw.style.cssText = 'display:inline-block;width:14px;height:14px;border-radius:3px;vertical-align:-2px;margin-right:6px;border:1px solid rgba(255,255,255,.5);background:#' + p.c.toString(16).padStart(6, '0'); el.appendChild(sw); el.appendChild(document.createTextNode('Aeronave asignada: ' + p.n)); paintJet(t); }
 			function buildLevels() {
@@ -3518,10 +3640,14 @@
 			}
 			function updateMenuInfo() {
 				const team = selTeam(), lv = LEVELS[G.menuSel]; const info = $('#lvlInfo'), bs = $('#bStart'), bu = $('#bUnlock'), b2 = $('#bPrac2'); $('#menuErr').textContent = ''; b2.classList.add('hidden');
-				if (!team) { info.textContent = 'Pide a Calidad que registre tu equipo en CONTROL DE CALIDAD.'; bs.disabled = true; bu.disabled = true; return; }
+				if (!team) { info.textContent = 'Selecciona tu equipo e ingresa la contraseña para habilitar las misiones.'; bs.disabled = true; bs.textContent = 'INICIA SESIÓN'; bu.disabled = true; return; }
 				bu.disabled = false;
 				if (!Store.canWrite) { info.textContent = 'Este juego debe abrirse con la cuenta de Calidad para registrar intentos.'; bs.disabled = true; return; }
-				if (!isUnlocked(team, lv.n)) { info.textContent = 'Nivel ' + lv.n + ' bloqueado. Encuentren la ficha del ' + lv.dia.toLowerCase() + ' y escriban su código.'; bs.disabled = true; bs.textContent = 'INICIAR'; return; }
+				if (!isUnlocked(team, lv.n)) {
+					const minReq = PASS_THRESHOLDS[lv.n - 1] || 800;
+					info.textContent = 'Nivel ' + lv.n + ' bloqueado. Completa el Nivel ' + (lv.n - 1) + ' con al menos ' + minReq.toLocaleString('es-CO') + ' pts y responde bien la pregunta SPC para desbloquearlo.';
+					bs.disabled = true; bs.textContent = 'BLOQUEADO'; return;
+				}
 				const av = availableAttempts(team, lv.n);
 				const dbScore = (typeof team['score_l' + lv.n] === 'number' && team['score_l' + lv.n] > 0) ? team['score_l' + lv.n] : ((att(team, lv.n).final && typeof att(team, lv.n).final.score === 'number' && att(team, lv.n).final.status === 'completado') ? att(team, lv.n).final.score : null);
 				if (!av.length || dbScore != null) { info.textContent = 'Nivel ' + lv.n + ' completado. Puntaje definitivo: ' + (dbScore || 0).toLocaleString('es-CO') + ' pts.'; bs.disabled = true; bs.textContent = 'COMPLETADO'; return; }
@@ -3529,8 +3655,9 @@
 				const a = att(team, lv.n);
 				const bestPrac = Math.max((a.practice && a.practice.status === 'completado' && typeof a.practice.score === 'number') ? a.practice.score : 0, (a.practice2 && a.practice2.status === 'completado' && typeof a.practice2.score === 'number') ? a.practice2.score : 0);
 				const pMsg = bestPrac > 0 ? ' Última práctica: ' + bestPrac.toLocaleString('es-CO') + ' pts (entrenamiento).' : '';
-				if (av[0] === 'practice') { bs.textContent = 'JUGAR PRÁCTICA 1'; info.textContent = 'Nivel ' + lv.n + ' · ' + lv.tema + '. Práctica 1 de 2 (no suma puntos).'; }
-				else { bs.textContent = 'JUGAR DEFINITIVO'; if (av.includes('practice2')) b2.classList.remove('hidden'); info.textContent = 'Nivel ' + lv.n + ' · ' + lv.tema + '.' + pMsg + ' ' + (av.includes('practice2') ? 'Pueden hacer la práctica 2 o jugar el intento DEFINITIVO.' : 'Prácticas usadas. Solo queda el intento DEFINITIVO, que cuenta para el ranking.'); }
+				const minGoal = PASS_THRESHOLDS[lv.n] || 800;
+				if (av[0] === 'practice') { bs.textContent = 'JUGAR PRÁCTICA 1'; info.textContent = 'Nivel ' + lv.n + ' · ' + lv.dia + '. Meta: ' + minGoal.toLocaleString('es-CO') + ' pts + Pregunta SPC. Práctica 1 de 2.'; }
+				else { bs.textContent = 'JUGAR DEFINITIVO'; if (av.includes('practice2')) b2.classList.remove('hidden'); info.textContent = 'Nivel ' + lv.n + ' · ' + lv.dia + '.' + pMsg + ' Meta: ' + minGoal.toLocaleString('es-CO') + ' pts + Pregunta SPC. ' + (av.includes('practice2') ? 'Pueden hacer la práctica 2 o jugar el DEFINITIVO.' : 'Prácticas agotadas. Solo queda el DEFINITIVO para el ranking.'); }
 			}
 			function buildRanking() {
 				const box = $('#rank'); box.innerHTML = '';
@@ -3561,7 +3688,7 @@
 				};
 				if (skipBriefing) go(); else openPages(briefingPages(lv, type), go, 'COMENZAR');
 			}
-			$('#bStart').onclick = () => { const team = selTeam(); if (!team) return; const av = availableAttempts(team, LEVELS[G.menuSel].n); if (!av.length) return; startAttempt(av[0] === 'practice' ? 'practice' : 'final'); };
+			$('#bStart').onclick = () => { const team = selTeam(); if (!team) { const pinEl = $('#teamPassIn'); if (pinEl) pinEl.focus(); toast('Inicia sesión con tu equipo para jugar.', 'warn', 2500); return; } const av = availableAttempts(team, LEVELS[G.menuSel].n); if (!av.length) return; startAttempt(av[0] === 'practice' ? 'practice' : 'final'); };
 			$('#bPrac2').onclick = () => startAttempt('practice2');
 			$('#bAgainYes').onclick = () => { G.menuSel = G.level; startAttempt('practice2', true); };
 			$('#bAgainNo').onclick = () => { G.menuSel = G.level; goMenu(); };
@@ -3602,6 +3729,7 @@
 					const mk = (label, fn, cls) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'btn sm ' + (cls || 'ghost'); b.textContent = label; b.style.marginLeft = '4px'; b.onclick = fn; td.appendChild(b); return b; };
 					mk('Desbloquear', async () => { await safe(Store.updateTeam(t.id, { unlocked: { [sel.value]: true } }), 'Nivel ' + sel.value + ' desbloqueado para ' + t.name); });
 					mk('Reiniciar intentos', async () => { const ok = await confirmBox('REINICIAR INTENTOS', 'Se borrarán las prácticas y el definitivo del nivel ' + sel.value + ' de ' + t.name + '.', 'REINICIAR'); show('#admin'); if (!ok) return; const tmp = JSON.parse(JSON.stringify(t)); if (tmp.attempts) delete tmp.attempts[sel.value]; await safe(Store.updateTeam(t.id, { attempts: { [sel.value]: { practice: null, practice2: null, final: null } }, ['score_l' + sel.value]: 0, total: calcTotal(tmp) }), 'Intentos del nivel ' + sel.value + ' reiniciados'); });
+					mk('Clave', async () => { const np = prompt('Nueva contraseña para ' + t.name + ':', 'spc2026'); if (!np || !np.trim()) return; await safe(Store.updateTeam(t.id, { password_hash: np.trim() }), 'Contraseña actualizada para ' + t.name); });
 					mk('Eliminar', async () => { const ok = await confirmBox('ELIMINAR EQUIPO', 'Se eliminará ' + t.name + ' con todos sus intentos.', 'ELIMINAR'); show('#admin'); if (!ok) return; await safe(Store.deleteTeam(t.id), 'Equipo eliminado'); }, 'danger');
 					tr.appendChild(td); tb.appendChild(tr);
 				});

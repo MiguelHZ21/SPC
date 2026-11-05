@@ -23,6 +23,15 @@ const UNLOCK_CODES = {
   5: process.env.CODE_LEVEL_5 || 'SPC-AHA5'
 };
 
+// Umbrales mínimos de puntaje para aprobar nivel y desbloquear el siguiente
+const PASS_THRESHOLDS = {
+  1: 800,
+  2: 1000,
+  3: 1200,
+  4: 1400,
+  5: 1600
+};
+
 // Preguntas y respuestas SPC (mantenidas en el servidor)
 const QUESTIONS = {
   1: {
@@ -219,7 +228,7 @@ async function initNeon() {
         ended_at TIMESTAMPTZ
       );
     `);
-    // Asegurar que existan las columnas de puntaje definitivo por nivel
+    // Asegurar que existan las columnas de puntaje definitivo por nivel y contraseña de equipo
     try {
       await pgPool.query(`
         ALTER TABLE teams ADD COLUMN IF NOT EXISTS score_l1 INT DEFAULT 0;
@@ -227,6 +236,16 @@ async function initNeon() {
         ALTER TABLE teams ADD COLUMN IF NOT EXISTS score_l3 INT DEFAULT 0;
         ALTER TABLE teams ADD COLUMN IF NOT EXISTS score_l4 INT DEFAULT 0;
         ALTER TABLE teams ADD COLUMN IF NOT EXISTS score_l5 INT DEFAULT 0;
+        ALTER TABLE teams ADD COLUMN IF NOT EXISTS password_hash VARCHAR(255) DEFAULT '';
+      `);
+      // Asignar contraseña por defecto si está vacía
+      await pgPool.query(`
+        UPDATE teams SET password_hash = 'spc2026' WHERE password_hash IS NULL OR password_hash = '';
+      `);
+      // Asegurar que el nivel 1 esté desbloqueado para todos
+      await pgPool.query(`
+        UPDATE teams SET unlocked = jsonb_set(COALESCE(unlocked, '{}'::jsonb), '{1}', 'true'::jsonb)
+        WHERE NOT (unlocked ? '1');
       `);
       // Migrar puntajes existentes de attempts a sus columnas correspondientes
       await pgPool.query(`
@@ -251,8 +270,8 @@ async function initNeon() {
     store.config = configRes.rows[0].value;
   }
 
-  // 3. Cargar equipos con puntajes definitivos de cada nivel
-  const teamsRes = await pgPool.query('SELECT id, name, shift, color, total, score_l1, score_l2, score_l3, score_l4, score_l5, unlocked, attempts, created_at FROM teams');
+  // 3. Cargar equipos con puntajes definitivos de cada nivel y contraseña
+  const teamsRes = await pgPool.query('SELECT id, name, shift, color, total, score_l1, score_l2, score_l3, score_l4, score_l5, unlocked, attempts, created_at, password_hash FROM teams');
   if (teamsRes.rows.length) {
     store.teams = teamsRes.rows.map(r => {
       const atts = r.attempts || {};
@@ -275,8 +294,9 @@ async function initNeon() {
         score_l3: r.score_l3 == null ? 0 : Number(r.score_l3),
         score_l4: r.score_l4 == null ? 0 : Number(r.score_l4),
         score_l5: r.score_l5 == null ? 0 : Number(r.score_l5),
-        unlocked: r.unlocked || {},
+        unlocked: Object.assign({ 1: true }, r.unlocked || {}),
         attempts: atts,
+        password_hash: r.password_hash || 'spc2026',
         created: r.created_at ? new Date(r.created_at).toISOString() : new Date().toISOString()
       };
     });
@@ -310,11 +330,11 @@ async function flushNeon() {
         await client.query('DELETE FROM teams');
       }
 
-      // Upsert de cada equipo con sus puntajes definitivos por nivel
+      // Upsert de cada equipo con sus puntajes definitivos por nivel y contraseña
       for (const t of store.teams) {
         await client.query(`
-          INSERT INTO teams (id, name, shift, color, total, score_l1, score_l2, score_l3, score_l4, score_l5, unlocked, attempts, updated_at)
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW())
+          INSERT INTO teams (id, name, shift, color, total, score_l1, score_l2, score_l3, score_l4, score_l5, unlocked, attempts, password_hash, updated_at)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW())
           ON CONFLICT (id) DO UPDATE SET
             name = EXCLUDED.name,
             shift = EXCLUDED.shift,
@@ -327,6 +347,7 @@ async function flushNeon() {
             score_l5 = EXCLUDED.score_l5,
             unlocked = EXCLUDED.unlocked,
             attempts = EXCLUDED.attempts,
+            password_hash = COALESCE(NULLIF(EXCLUDED.password_hash, ''), teams.password_hash, 'spc2026'),
             updated_at = NOW()
         `, [
           t.id,
@@ -339,8 +360,9 @@ async function flushNeon() {
           t.score_l3 || 0,
           t.score_l4 || 0,
           t.score_l5 || 0,
-          JSON.stringify(t.unlocked || {}),
-          JSON.stringify(t.attempts || {})
+          JSON.stringify(Object.assign({ 1: true }, t.unlocked || {})),
+          JSON.stringify(t.attempts || {}),
+          t.password_hash || 'spc2026'
         ]);
       }
       await client.query('COMMIT');
@@ -472,7 +494,7 @@ async function syncFromNeon(force = false) {
   if (!force && (now - lastNeonSync) < 1500) return;
   lastNeonSync = now;
   try {
-    const teamsRes = await pgPool.query('SELECT id, name, shift, color, total, score_l1, score_l2, score_l3, score_l4, score_l5, unlocked, attempts, created_at FROM teams');
+    const teamsRes = await pgPool.query('SELECT id, name, shift, color, total, score_l1, score_l2, score_l3, score_l4, score_l5, unlocked, attempts, created_at, password_hash FROM teams');
     if (teamsRes.rows.length) {
       const dbTeams = teamsRes.rows.map(r => {
         const atts = r.attempts || {};
@@ -495,8 +517,9 @@ async function syncFromNeon(force = false) {
           score_l3: r.score_l3 == null ? 0 : Number(r.score_l3),
           score_l4: r.score_l4 == null ? 0 : Number(r.score_l4),
           score_l5: r.score_l5 == null ? 0 : Number(r.score_l5),
-          unlocked: r.unlocked || {},
+          unlocked: Object.assign({ 1: true }, r.unlocked || {}),
           attempts: atts,
+          password_hash: r.password_hash || 'spc2026',
           created: r.created_at ? new Date(r.created_at).toISOString() : new Date().toISOString()
         };
         item.total = calcTotal(item);
@@ -550,9 +573,13 @@ app.get('/api/ping', (req, res) => {
 // 1. Estado sincronizado completo (versión, equipos, configuración)
 app.get('/api/state', async (req, res) => {
   await syncFromNeon();
+  const safeTeams = (store.teams || []).map(t => {
+    const { password_hash, ...rest } = t;
+    return Object.assign({}, rest, { total: calcTotal(t) });
+  });
   res.json({
     version: store.version || 1,
-    teams: store.teams || [],
+    teams: safeTeams,
     config: store.config || {}
   });
 });
@@ -564,7 +591,8 @@ app.get('/api/teams/:id', async (req, res) => {
   if (!team) {
     return res.status(404).json({ error: 'Equipo no encontrado' });
   }
-  res.json(Object.assign({}, team, { total: calcTotal(team) }));
+  const { password_hash, ...rest } = team;
+  res.json(Object.assign({}, rest, { total: calcTotal(team) }));
 });
 
 // 3. Crear o actualizar equipo por ID (sincronizado con Store.updateTeam / Store.addTeam)
@@ -616,10 +644,35 @@ app.put('/api/teams/:id', async (req, res) => {
   }
   doc.total = calcTotal(doc);
 
+  // Asegurar que el nivel 1 siempre esté desbloqueado
+  if (!doc.unlocked) doc.unlocked = {};
+  doc.unlocked[1] = true;
+
+  // Desbloqueo progresivo automático: si completaron con éxito y respondieron bien con puntaje >= meta
+  if (doc.attempts && typeof doc.attempts === 'object') {
+    for (let n = 1; n < 5; n++) {
+      const attObj = doc.attempts[n] || doc.attempts[String(n)];
+      if (attObj && typeof attObj === 'object') {
+        const minScore = PASS_THRESHOLDS[n] || 800;
+        const passed = ['practice', 'practice2', 'final'].some(type => {
+          const a = attObj[type];
+          return a && a.status === 'completado' && a.success && a.quiz && (a.score >= minScore);
+        });
+        if (passed) {
+          doc.unlocked[n + 1] = true;
+        }
+      }
+    }
+  }
+
   const idx = store.teams.findIndex(t => t.id === id);
   if (idx >= 0) {
-    store.teams[idx] = doc;
+    if (!doc.password_hash && store.teams[idx].password_hash) {
+      doc.password_hash = store.teams[idx].password_hash;
+    }
+    store.teams[idx] = Object.assign({}, store.teams[idx], doc);
   } else {
+    if (!doc.password_hash) doc.password_hash = 'spc2026';
     store.teams.push(doc);
   }
 
@@ -629,8 +682,8 @@ app.put('/api/teams/:id', async (req, res) => {
   if (pgPool) {
     try {
       await pgPool.query(`
-        INSERT INTO teams (id, name, shift, color, total, score_l1, score_l2, score_l3, score_l4, score_l5, unlocked, attempts, updated_at)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW())
+        INSERT INTO teams (id, name, shift, color, total, score_l1, score_l2, score_l3, score_l4, score_l5, unlocked, attempts, password_hash, updated_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW())
         ON CONFLICT (id) DO UPDATE SET
           name = EXCLUDED.name,
           shift = EXCLUDED.shift,
@@ -643,6 +696,7 @@ app.put('/api/teams/:id', async (req, res) => {
           score_l5 = EXCLUDED.score_l5,
           unlocked = EXCLUDED.unlocked,
           attempts = EXCLUDED.attempts,
+          password_hash = COALESCE(NULLIF(EXCLUDED.password_hash, ''), teams.password_hash, 'spc2026'),
           updated_at = NOW();
       `, [
         doc.id,
@@ -656,7 +710,8 @@ app.put('/api/teams/:id', async (req, res) => {
         doc.score_l4 || 0,
         doc.score_l5 || 0,
         JSON.stringify(doc.unlocked || {}),
-        JSON.stringify(doc.attempts || {})
+        JSON.stringify(doc.attempts || {}),
+        doc.password_hash || 'spc2026'
       ]);
 
       // Guardar también en attempt_logs para trazabilidad histórica en Neon
@@ -766,17 +821,74 @@ app.get('/api/health', async (req, res) => {
 // 2. Obtener lista pública de equipos y estado
 app.get('/api/teams', async (req, res) => {
   await syncFromNeon();
-  // Retornar solo los datos necesarios
+  // Retornar solo los datos necesarios (ocultando password_hash)
   const safeTeams = store.teams.map(t => ({
     id: t.id,
     name: t.name,
     shift: t.shift,
     color: t.color,
-    unlocked: t.unlocked || {},
+    unlocked: Object.assign({ 1: true }, t.unlocked || {}),
     attempts: t.attempts || {},
     total: calcTotal(t)
   }));
   res.json(safeTeams);
+});
+
+// 2b. Inicio de sesión de equipo (Autenticación con contraseña)
+app.post('/api/team/login', async (req, res) => {
+  const { teamId, password } = req.body;
+  if (!teamId || !password) {
+    return res.status(400).json({ error: 'Equipo y contraseña requeridos' });
+  }
+
+  await syncFromNeon();
+  const team = store.teams.find(t => t.id === teamId);
+  if (!team) {
+    return res.status(404).json({ error: 'Equipo no encontrado' });
+  }
+
+  const cleanPass = String(password).trim();
+  const storedHash = String(team.password_hash || '').trim();
+
+  let isValid = false;
+  if (!storedHash) {
+    isValid = (cleanPass === 'spc2026');
+    if (isValid) {
+      team.password_hash = 'spc2026';
+      saveStore();
+    }
+  } else if (storedHash.startsWith('$2a$') || storedHash.startsWith('$2b$')) {
+    isValid = bcrypt.compareSync(cleanPass, storedHash);
+  } else {
+    isValid = (cleanPass === storedHash);
+  }
+
+  if (!isValid) {
+    return res.status(401).json({ error: 'Contraseña de equipo incorrecta' });
+  }
+
+  if (!team.unlocked) team.unlocked = {};
+  team.unlocked[1] = true;
+  saveStore();
+
+  const token = jwt.sign(
+    { teamId: team.id, teamName: team.name, role: 'team' },
+    JWT_SECRET,
+    { expiresIn: '24h' }
+  );
+
+  res.json({
+    success: true,
+    token,
+    team: {
+      id: team.id,
+      name: team.name,
+      shift: team.shift,
+      color: team.color,
+      unlocked: team.unlocked,
+      total: calcTotal(team)
+    }
+  });
 });
 
 // 3. Desbloquear nivel con código de la yincana (Validación 100% en servidor)
@@ -989,12 +1101,31 @@ app.post('/api/attempts/finish', (req, res) => {
     team.total = calcTotal(team);
   }
 
+  // Desbloqueo progresivo automático:
+  // Si respondió bien a la pregunta SPC y el puntaje es >= meta del nivel y no se estrelló
+  const minScore = PASS_THRESHOLDS[level] || 800;
+  const passed = (pQuiz > 0) && (totalScore >= minScore) && !!stats.success;
+  let unlockedNext = null;
+
+  if (passed && level < 5) {
+    if (!team.unlocked) team.unlocked = {};
+    if (!team.unlocked[level + 1]) {
+      team.unlocked[level + 1] = true;
+      unlockedNext = level + 1;
+    }
+  }
+  if (!team.unlocked) team.unlocked = {};
+  team.unlocked[1] = true;
+
   saveStore();
 
   res.json({
     success: true,
     score: totalScore,
-    totalTeamScore: team.total
+    totalTeamScore: team.total,
+    passed,
+    minScore,
+    unlockedNext
   });
 });
 
@@ -1102,6 +1233,21 @@ app.post('/api/admin/teams/:id/unlock', authAdmin, (req, res) => {
   saveStore();
 
   res.json({ success: true, message: `Nivel ${lvl} desbloqueado para ${team.name}` });
+});
+
+// 12b. Cambiar contraseña de un equipo (Solo Admin)
+app.post('/api/admin/teams/:id/password', authAdmin, (req, res) => {
+  const { id } = req.params;
+  const { password } = req.body;
+  if (!password || String(password).trim().length < 3) {
+    return res.status(400).json({ error: 'La contraseña debe tener al menos 3 caracteres' });
+  }
+  const team = store.teams.find(t => t.id === id);
+  if (!team) return res.status(404).json({ error: 'Equipo no encontrado' });
+
+  team.password_hash = String(password).trim();
+  saveStore();
+  res.json({ success: true, message: `Contraseña actualizada para ${team.name}` });
 });
 
 // 13. Cambiar PIN de Calidad (Solo Admin)

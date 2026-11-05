@@ -14,7 +14,8 @@ CREATE TABLE IF NOT EXISTS teams (
     score_l3 INT DEFAULT 0,
     score_l4 INT DEFAULT 0,
     score_l5 INT DEFAULT 0,
-    unlocked JSONB DEFAULT '{}'::jsonb,
+    password_hash VARCHAR(255) DEFAULT 'spc2026',
+    unlocked JSONB DEFAULT '{"1": true}'::jsonb,
     attempts JSONB DEFAULT '{}'::jsonb,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
@@ -26,6 +27,9 @@ ALTER TABLE teams ADD COLUMN IF NOT EXISTS score_l2 INT DEFAULT 0;
 ALTER TABLE teams ADD COLUMN IF NOT EXISTS score_l3 INT DEFAULT 0;
 ALTER TABLE teams ADD COLUMN IF NOT EXISTS score_l4 INT DEFAULT 0;
 ALTER TABLE teams ADD COLUMN IF NOT EXISTS score_l5 INT DEFAULT 0;
+ALTER TABLE teams ADD COLUMN IF NOT EXISTS password_hash VARCHAR(255) DEFAULT 'spc2026';
+UPDATE teams SET password_hash = 'spc2026' WHERE password_hash IS NULL OR password_hash = '';
+UPDATE teams SET unlocked = jsonb_set(COALESCE(unlocked, '{}'::jsonb), '{1}', 'true'::jsonb) WHERE NOT (unlocked ? '1');
 
 -- Índice para acelerar el ranking y consultas por puntaje total
 CREATE INDEX IF NOT EXISTS idx_teams_total ON teams (total DESC);
