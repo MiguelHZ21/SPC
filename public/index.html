@@ -2910,6 +2910,7 @@
 				thudNow() { if (!this.ready) return; try { this.thud.triggerAttackRelease('G1', 0.2); } catch (e) { } },
 				click(note) { if (!this.ready) return; try { this.ui.triggerAttackRelease(note || 'E6', 0.05); } catch (e) { } },
 				flapNow() { if (!this.ready) return; try { this.ui.triggerAttackRelease('C6', 0.03); } catch (e) { } },
+				fanfare() { if (!this.ready || typeof Tone === 'undefined') return; try { const n = Tone.now(); this.ui.triggerAttackRelease('C5', 0.08, n); this.ui.triggerAttackRelease('E5', 0.08, n + 0.09); this.ui.triggerAttackRelease('G5', 0.08, n + 0.18); this.ui.triggerAttackRelease('C6', 0.22, n + 0.27); } catch (e) { } },
 				setMute(m) { this.muted = m; lsSet('mbc_mute', m); $('#bMute').textContent = 'SONIDO: ' + (m ? 'NO' : 'SÍ'); if (typeof Tone !== 'undefined') { try { Tone.Destination.mute = m; } catch (e) { } } }
 			};
 			$('#bMute').textContent = 'SONIDO: ' + (AudioSys.muted ? 'NO' : 'SÍ');
@@ -3580,7 +3581,7 @@
 					const data = await res.json();
 					if (!res.ok || !data.success) {
 						msg.textContent = data.error || 'Contraseña incorrecta.';
-						AudioSys.click('C4');
+						try { AudioSys.click('C4'); } catch (ae) { }
 						return;
 					}
 					localStorage.setItem('mbc_team_session', JSON.stringify({ teamId, token: data.token }));
@@ -3588,12 +3589,13 @@
 					$('#teamPassIn').value = '';
 					msg.textContent = '';
 					toast('¡Bienvenido, ' + data.team.name + '!', 'ok', 3000);
-					AudioSys.fanfare();
-					await Store.pull();
+					try { AudioSys.fanfare(); } catch (ae) { }
+					try { await Store.pull(); } catch (pe) { }
 					updateTeamAuthUI();
 					buildLevels();
 					buildRanking();
 				} catch (e) {
+					console.error('Error al iniciar sesión de equipo:', e);
 					msg.textContent = 'Error al verificar con el servidor de planta.';
 				}
 			}
