@@ -2349,7 +2349,6 @@
 					<div class="row" style="margin-top:4px">
 						<button class="btn big" id="bStart" type="button">INICIAR</button>
 						<button class="btn ghost hidden" id="bPrac2" type="button">PRÁCTICA 2</button>
-						<button class="btn ghost" id="bUnlock" type="button">INGRESAR CÓDIGO</button>
 						<button class="btn ghost" id="bTut" type="button">CÓMO SE JUEGA</button>
 					</div>
 					<div id="modeBanner"></div>
@@ -2438,19 +2437,6 @@
 			</div>
 		</section>
 
-		<section id="codeModal" class="screen small-modal hidden">
-			<div class="card">
-				<h2 style="color:var(--gold);font-size:clamp(20px,2.4vw,28px)">DESBLOQUEAR MISIÓN</h2>
-				<p class="muted" id="codeFor"></p>
-				<input id="codeIn" maxlength="12" placeholder="SPC-XXXX" autocomplete="off"
-					style="text-transform:uppercase;font-size:22px;text-align:center;letter-spacing:.15em">
-				<div id="codeMsg" style="min-height:1.4em;margin-top:8px"></div>
-				<div class="row" style="justify-content:flex-end;margin-top:8px"><button class="btn ghost"
-						id="codeCancel" type="button">CANCELAR</button><button class="btn" id="codeOk"
-						type="button">VALIDAR CÓDIGO</button></div>
-			</div>
-		</section>
-
 		<section id="confirmModal" class="screen small-modal hidden">
 			<div class="card">
 				<h2 id="cfTitle" style="color:var(--warn);font-size:clamp(20px,2.4vw,28px)"></h2>
@@ -2526,9 +2512,7 @@
 			function lsSet(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { } }
 			const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 			function sha256(ascii) { function rr(v, a) { return (v >>> a) | (v << (32 - a)); } const mp = Math.pow, mw = mp(2, 32); let i, j, result = ''; const words = [], bl = ascii.length * 8; let hash = sha256.h = sha256.h || []; const k = sha256.k = sha256.k || []; let pc = k.length; const ic = {}; for (let c = 2; pc < 64; c++) { if (!ic[c]) { for (i = 0; i < 313; i += c)ic[i] = c; hash[pc] = (mp(c, .5) * mw) | 0; k[pc++] = (mp(c, 1 / 3) * mw) | 0; } } ascii += '\x80'; while (ascii.length % 64 - 56) ascii += '\x00'; for (i = 0; i < ascii.length; i++) { j = ascii.charCodeAt(i); if (j >> 8) return ''; words[i >> 2] |= j << ((3 - i) % 4) * 8; } words[words.length] = ((bl / mw) | 0); words[words.length] = bl; for (j = 0; j < words.length;) { const w = words.slice(j, j += 16); const old = hash; hash = hash.slice(0, 8); for (i = 0; i < 64; i++) { const w15 = w[i - 15], w2 = w[i - 2]; const a = hash[0], e = hash[4]; const t1 = hash[7] + (rr(e, 6) ^ rr(e, 11) ^ rr(e, 25)) + ((e & hash[5]) ^ ((~e) & hash[6])) + k[i] + (w[i] = (i < 16) ? w[i] : (w[i - 16] + (rr(w15, 7) ^ rr(w15, 18) ^ (w15 >>> 3)) + w[i - 7] + (rr(w2, 17) ^ rr(w2, 19) ^ (w2 >>> 10))) | 0); const t2 = (rr(a, 2) ^ rr(a, 13) ^ rr(a, 22)) + ((a & hash[1]) ^ (a & hash[2]) ^ (hash[1] & hash[2])); hash = [(t1 + t2) | 0].concat(hash); hash[4] = (hash[4] + t1) | 0; } for (i = 0; i < 8; i++)hash[i] = (hash[i] + old[i]) | 0; } for (i = 0; i < 8; i++) { for (j = 3; j + 1; j--) { const b = (hash[i] >> (j * 8)) & 255; result += ((b < 16) ? 0 : '') + b.toString(16); } } return result; }
-			const normCode = s => String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
-			const CODE_HASH = ['820ca5bb35832a96eab5414dfd12f2bbee78db81cc4c5c13d9e24b474c4ffb5e', '927398fc780b4536843e5b452287ffd934d8baeca0c6f5436c7f99bf32ba3fa7', 'ce734753f5449f8d432be90603c51f33a4fb94f844f143e4ace6911ace477ef5', '4d0e52b045501371caf37b50a76d64e7c7a3c52fe4ebc24112ae0cd23b366ba7', '25bd923c26fb7f6052fb41ea86fc1c82c53edeb94faeb3f372c61c6c938462ee'];
-			function checkCode(n, code) { return sha256('mbc26:' + normCode(code)) === CODE_HASH[n - 1]; }
+
 
 			/* ================= NIVELES SPC ================= */
 			const LEVELS = [
@@ -2919,7 +2903,7 @@
 			function toast(msg, cls, ms) { const t = $('#toast'); t.textContent = msg; t.className = 'panel show ' + (cls || ''); clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.className = 'panel ' + (cls || ''); }, ms || 2600); }
 			function impact(text, cls, sub) { const el = $('#impact'); el.className = ''; void el.offsetWidth; el.textContent = ''; el.appendChild(document.createTextNode(text)); if (sub) { const s = document.createElement('small'); s.textContent = sub; el.appendChild(s); } el.className = 'show ' + (cls || ''); }
 			const show = id => $(id).classList.remove('hidden'); const hide = id => $(id).classList.add('hidden');
-			const SCREENS = ['#menu', '#pages', '#question', '#pause', '#report', '#codeModal', '#confirmModal', '#admin'];
+			const SCREENS = ['#menu', '#pages', '#question', '#pause', '#report', '#confirmModal', '#admin'];
 			function only(id) { SCREENS.forEach(s => s === id ? show(s) : hide(s)); }
 			function confirmBox(title, text, yesLabel) { return new Promise(res => { $('#cfTitle').textContent = title; $('#cfText').textContent = text; $('#cfYes').textContent = yesLabel || 'CONFIRMAR'; show('#confirmModal'); const done = v => { hide('#confirmModal'); $('#cfYes').onclick = $('#cfNo').onclick = null; res(v); }; $('#cfYes').onclick = () => done(true); $('#cfNo').onclick = () => done(false); }); }
 
@@ -3532,7 +3516,7 @@
 			function pgPrev() { if (PG.i > 0) { PG.i--; renderPage(); AudioSys.click('C6'); } }
 			$('#pgNext').onclick = pgNext; $('#pgPrev').onclick = pgPrev; $('#pgClose').onclick = () => { G.state = 'menu'; only('#menu'); };
 			const TUTORIAL = [
-				{ t: '1 · LA YINCANA', b: 'Cada día los equipos buscan en planta el codigo escrito. El <em>código</em> desbloquea la misión del día en este juego recuerda inicia con SPC...' },
+				{ t: '1 · DESBLOQUEO DE MISIONES', b: 'Comienzas en el <em>Nivel 1</em>. Para desbloquear el siguiente nivel, debes superar la meta de puntaje requerida y responder correctamente la <em>pregunta SPC</em>.' },
 				{ t: '2 · INTENTOS POR NIVEL', b: 'Cada nivel tiene <em>hasta 2 prácticas</em> (no suman) y <em>1 intento definitivo</em> que cuenta para el ranking y los premios. Cada intento tiene una <em>pregunta SPC distinta</em>.' },
 				{ t: '3 · FASE PISTA', b: 'Mantén el avión sobre la línea central con <em>← / →</em> o <em>A / D</em> (o tocando los lados). El avión tiende a irse a los lados: corrige con suavidad. Mientras más estable, <em>más empuje</em> para llegar a la velocidad de rotación (VR) antes de que se acabe la pista.' },
 				{ t: '4 · LÍMITES', b: '<span class="c-cl">Blanco</span> = LC. <span class="c-ctrl">Naranja</span> = LIC/LSC: los calcula TU proceso con las primeras 20 muestras. <span class="c-spec">Rojo</span> = LIE/LSE: especificación del cliente. Si cruzas el rojo, el despegue se aborta.' },
@@ -3663,9 +3647,8 @@
 				updateMenuInfo();
 			}
 			function updateMenuInfo() {
-				const team = selTeam(), lv = LEVELS[G.menuSel]; const info = $('#lvlInfo'), bs = $('#bStart'), bu = $('#bUnlock'), b2 = $('#bPrac2'); $('#menuErr').textContent = ''; b2.classList.add('hidden');
-				if (!team) { info.textContent = 'Selecciona tu equipo e ingresa la contraseña para habilitar las misiones.'; bs.disabled = true; bs.textContent = 'INICIA SESIÓN'; bu.disabled = true; return; }
-				bu.disabled = false;
+				const team = selTeam(), lv = LEVELS[G.menuSel]; const info = $('#lvlInfo'), bs = $('#bStart'), b2 = $('#bPrac2'); $('#menuErr').textContent = ''; b2.classList.add('hidden');
+				if (!team) { info.textContent = 'Selecciona tu equipo e ingresa la contraseña para habilitar las misiones.'; bs.disabled = true; bs.textContent = 'INICIA SESIÓN'; return; }
 				if (!Store.canWrite) { info.textContent = 'Este juego debe abrirse con la cuenta de Calidad para registrar intentos.'; bs.disabled = true; return; }
 				if (!isUnlocked(team, lv.n)) {
 					const minReq = PASS_THRESHOLDS[lv.n - 1] || 800;
@@ -3690,7 +3673,7 @@
 				list.forEach((r, i) => { const row = document.createElement('div'); row.className = 'rrow' + (i < 3 && r.tot > 0 ? ' top' : ''); const pos = document.createElement('b'); pos.className = 'pos'; pos.textContent = (i + 1) + '°'; const sw = document.createElement('i'); sw.className = 'sw'; sw.style.background = '#' + teamPaint(r.t).c.toString(16).padStart(6, '0'); const nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = r.t.name; const lvl = document.createElement('span'); lvl.className = 'lv'; lvl.textContent = r.lv + '/5'; const tot = document.createElement('span'); tot.className = 'tt'; tot.textContent = r.tot.toLocaleString('es-CO');[pos, sw, nm, lvl, tot].forEach(e => row.appendChild(e)); box.appendChild(row); });
 			}
 			function modeBanner() {
-				const b = $('#modeBanner'); if (Store.mode === 'server') { b.className = ''; b.textContent = 'Conectado al servidor de planta: equipos, intentos y ranking se guardan en el servidor y se ven desde cualquier PC de la red.'; return; } if (Store.mode === 'remote') { b.className = ''; b.textContent = Store.canWrite ? 'Registro activo en la cuenta de Calidad: intentos, códigos y ranking se guardan y se ven en cualquier PC.' : 'Solo lectura: abre el juego con la cuenta de Calidad para jugar y registrar intentos.'; if (!Store.canWrite) b.className = 'warn'; }
+				const b = $('#modeBanner'); if (Store.mode === 'server') { b.className = ''; b.textContent = 'Conectado al servidor de planta: equipos, intentos y ranking se guardan en el servidor y se ven desde cualquier PC de la red.'; return; } if (Store.mode === 'remote') { b.className = ''; b.textContent = Store.canWrite ? 'Registro activo en la cuenta de Calidad: intentos, progreso y ranking se guardan y se ven en cualquier PC.' : 'Solo lectura: abre el juego con la cuenta de Calidad para jugar y registrar intentos.'; if (!Store.canWrite) b.className = 'warn'; }
 				else { b.className = 'warn'; b.textContent = 'MODO LOCAL: no hay conexión con la cuenta de Calidad. Los intentos se guardan solo en este navegador.'; }
 			}
 			function goMenu() {
@@ -3716,18 +3699,6 @@
 			$('#bPrac2').onclick = () => startAttempt('practice2');
 			$('#bAgainYes').onclick = () => { G.menuSel = G.level; startAttempt('practice2', true); };
 			$('#bAgainNo').onclick = () => { G.menuSel = G.level; goMenu(); };
-
-			/* ------------- Códigos de la yincana ------------- */
-			$('#bUnlock').onclick = () => { const team = selTeam(); if (!team) return; const lv = LEVELS[G.menuSel]; $('#codeFor').textContent = 'Equipo ' + team.name + ' · Nivel ' + lv.n + ' (' + lv.dia + '): escribe el código de la ficha encontrada.'; $('#codeIn').value = ''; $('#codeMsg').textContent = ''; $('#codeMsg').style.color = ''; show('#codeModal'); setTimeout(() => $('#codeIn').focus(), 50); };
-			$('#codeCancel').onclick = () => { hide('#codeModal'); };
-			async function tryCode() {
-				const team = selTeam(); if (!team) return; const code = $('#codeIn').value; let n = null; for (let k = 1; k <= 5; k++)if (checkCode(k, code)) { n = k; break; }
-				const msg = $('#codeMsg'); if (!n) { msg.style.color = 'var(--danger)'; msg.textContent = 'Código no válido. Revisa la ficha.'; AudioSys.beepNow('C4'); return; }
-				if (isUnlocked(team, n)) { msg.style.color = 'var(--cyan)'; msg.textContent = 'Ese código corresponde al nivel ' + n + ', que ya estaba desbloqueado.'; return; }
-				try { await Store.updateTeam(team.id, { unlocked: { [n]: true } }); } catch (e) { msg.style.color = 'var(--danger)'; msg.textContent = 'No se pudo guardar. Revisa la conexión.'; return; }
-				msg.style.color = 'var(--hud)'; msg.textContent = '¡Nivel ' + n + ' desbloqueado!'; AudioSys.click('C7'); G.menuSel = n - 1; setTimeout(() => { hide('#codeModal'); buildLevels(); }, 900);
-			}
-			$('#codeOk').onclick = tryCode; $('#codeIn').addEventListener('keydown', e => { if (e.key === 'Enter') tryCode(); });
 
 			/* ------------- Control de Calidad (PIN) ------------- */
 			let admOpen = false;
