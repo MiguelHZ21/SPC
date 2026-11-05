@@ -2382,8 +2382,7 @@
 		<section id="question" class="screen hidden">
 			<div class="card">
 				<h2 style="color:var(--cyan);font-size:clamp(18px,2.4vw,30px)">CONTROL DE MISIÓN · PREGUNTA SPC</h2>
-				<div class="muted" style="margin-top:4px">Responde bien para completar el despegue. Si fallas, el avión
-					pierde el control.</div>
+				<div class="muted" style="margin-top:4px">Responde correctamente para autorizar el despegue. Si te equivocas, se reiniciará el nivel.</div>
 				<div id="qText"></div>
 				<div class="opts" id="qOpts"></div>
 				<div id="qFeedback"></div>
@@ -3172,10 +3171,33 @@
 				if (G.quiz.answered) return; const Qn = G.Q; G.quiz.answered = true; G.quiz.correct = G.qOrd[i] === Qn.c;
 				[...document.querySelectorAll('#qOpts .opt')].forEach((b, j) => { b.disabled = true; if (G.qOrd[j] === Qn.c) b.classList.add('ok'); else if (j === i) b.classList.add('no'); });
 				const fb = $('#qFeedback'); fb.innerHTML = ''; const h = document.createElement('div'); h.className = 'disp'; h.style.cssText = 'font-size:1.2em;margin-bottom:4px;color:' + (G.quiz.correct ? '#5dffb0' : '#ff6a5a');
-				const prac = G.attemptType !== 'final'; h.textContent = G.quiz.correct ? '¡CORRECTO! Despegue autorizado (+500)' : (prac ? 'INCORRECTO · En práctica el avión despega igual (sin +500). En el definitivo, este error derriba el avión.' : 'INCORRECTO · El avión pierde el control'); const p = document.createElement('div'); p.textContent = Qn.e; fb.appendChild(h); fb.appendChild(p);
-				const b = $('#bQContinue'); b.textContent = G.quiz.correct || prac ? 'CONTINUAR AL DESPEGUE' : 'CONTINUAR'; show('#bQContinue'); G.quiz.correct ? AudioSys.click('C7') : AudioSys.beepNow('C4');
+				h.textContent = G.quiz.correct ? '¡CORRECTO! Despegue autorizado (+500)' : 'INCORRECTO · Respuesta equivocada';
+				const p = document.createElement('div'); p.textContent = Qn.e; fb.appendChild(h); fb.appendChild(p);
+				if (!G.quiz.correct) {
+					const warn = document.createElement('div');
+					warn.style.cssText = 'margin-top:8px;font-size:0.95em;color:var(--warn);font-weight:bold;';
+					warn.textContent = '⚠️ Para autorizar el despegue debes acertar la pregunta SPC. El nivel se reiniciará para que lo intentes de nuevo.';
+					fb.appendChild(warn);
+				}
+				const b = $('#bQContinue'); b.textContent = G.quiz.correct ? 'CONTINUAR AL DESPEGUE' : 'REINICIAR NIVEL'; show('#bQContinue');
+				try { G.quiz.correct ? AudioSys.click('C7') : AudioSys.beepNow('C4'); } catch (e) { }
 			}
-			$('#bQContinue').onclick = () => { only(null); if (G.quiz.correct || G.attemptType !== 'final') beginClimb(); else beginCrash(); };
+			function restartLevel() {
+				only(null);
+				setInterior(false);
+				camera.near = 0.05;
+				camera.fov = camera.aspect < 1 ? 78 : 60;
+				camera.updateProjectionMatrix();
+				camera.position.set(0, 3.3, 10);
+				camera.lookAt(0, 1.0, -9);
+				AudioSys.engine(0, false);
+				const lv = curLevel();
+				const team = Store.team(G.teamId);
+				G.qIdx = pickQuestion(team, lv.n);
+				toast('Nivel reiniciado. ¡Apunta a la respuesta correcta para despegar!', 'warn', 3500);
+				startLevel();
+			}
+			$('#bQContinue').onclick = () => { only(null); if (G.quiz.correct) beginClimb(); else restartLevel(); };
 
 			/* ------------- Ascenso (acierto) ------------- */
 			function beginClimb() { const R = G.R; G.state = 'climb'; R.clT = 0; G.timeScale = 0.35; impact('¡DESPEGUE!', 'gold', 'Proceso estable · rumbo a 6σ'); AudioSys.boomNow(); G.shake = 0.8; }
@@ -3515,7 +3537,7 @@
 				{ t: '3 · FASE PISTA', b: 'Mantén el avión sobre la línea central con <em>← / →</em> o <em>A / D</em> (o tocando los lados). El avión tiende a irse a los lados: corrige con suavidad. Mientras más estable, <em>más empuje</em> para llegar a la velocidad de rotación (VR) antes de que se acabe la pista.' },
 				{ t: '4 · LÍMITES', b: '<span class="c-cl">Blanco</span> = LC. <span class="c-ctrl">Naranja</span> = LIC/LSC: los calcula TU proceso con las primeras 20 muestras. <span class="c-spec">Rojo</span> = LIE/LSE: especificación del cliente. Si cruzas el rojo, el despegue se aborta.' },
 				{ t: '5 · CADA DÍA ES MÁS DIFÍCIL', b: '<em>Lunes:</em> ráfagas de viento. <em>Martes:</em> + obstáculos. <em>Miércoles:</em> + calibrar instrumentos (ESPACIO). <em>Jueves:</em> + cambio de método (controles invertidos) y deriva. <em>Viernes:</em> + la especificación se estrecha y puedes SALTAR obstáculos (↑ / W).' },
-				{ t: '6 · DESPEGUE', b: 'Al alcanzar la VR la cámara entra a la cabina. Control de Misión te hace una <em>pregunta SPC</em> en la pantalla del tablero. Si aciertas, despegas. En práctica, si fallas, despegas igual para practicar el vuelo. <em>En el definitivo, si fallas, el avión se desploma</em> y termina la misión.' },
+				{ t: '6 · DESPEGUE', b: 'Al alcanzar la VR la cámara entra a la cabina. Control de Misión te hace una <em>pregunta SPC</em> en la pantalla del tablero. Es obligatorio responder bien para autorizar el despegue (+500). <em>Si te equivocas, el nivel se reinicia</em> para que lo intentes de nuevo.' },
 				{ t: '7 · VUELO · PILOTO', b: 'El piloto mantiene el avión en <em>0σ</em> con <em>↑ / ↓</em> o <em>W / S</em> (o tocando arriba/abajo) y lo hace pasar por los <em>anillos</em>. Los anillos se hacen más pequeños cada día: la especificación se estrecha.' },
 				{ t: '8 · VUELO · COPILOTO', b: 'El copiloto vigila la <em>carta de control de la temperatura del motor</em> y pulsa <em>C</em> (o el botón CAUSA ESPECIAL) cuando ve una señal: <em>un punto fuera de la línea naranja</em> o, desde el jueves, <em>7 puntos seguidos del mismo color</em> (mismo lado de la línea blanca). Reaccionar a variación común es una <em>falsa alarma</em> y resta puntos.' },
 				{ t: '9 · INDICADORES Y PUNTAJE', b: 'Siempre verás X̄, σ, Cp, Cpk y el <em>nivel sigma</em> (Z = 3·Cpk). Meta: Cpk ≥ 1,33 y nivel σ ≥ 4. El puntaje premia estabilidad, capacidad, conocimiento y lectura correcta de la carta.' }];
@@ -3526,7 +3548,7 @@
 				return [
 					{ t: 'NIVEL ' + lv.n + ' · ' + lv.dia.toUpperCase(), b: '<em>' + lv.tema + '</em><br><br>' + lv.intro },
 					{ t: 'FASE PISTA', b: lv.mech[0] + '<br><br>Alcanza <em>VR = ' + Math.round(lv.vr * 9) + ' km/h</em> antes de que se acabe la pista.<br>Controles: ' + rwCtl },
-					{ t: 'DESPEGUE', b: 'La cámara entra a la cabina y aparece una <em>pregunta SPC</em> en la pantalla del tablero. Si aciertan, despegan (+500). ' + (type === 'final' ? '<em>Si fallan, el avión se desploma</em> y termina la misión.' : 'En práctica, si fallan, despegan igual (sin +500) para practicar el vuelo.') },
+					{ t: 'DESPEGUE', b: 'La cámara entra a la cabina y aparece una <em>pregunta SPC</em> en la pantalla del tablero. Es obligatorio responder bien para autorizar el despegue (+500). <em>Si se equivocan, el nivel se reinicia</em> para que puedan intentarlo nuevamente.' },
 					{ t: 'FASE VUELO', b: lv.mech[1] + '<br><br>' + flCtl + '<br><br>Recomendado: una persona pilota y otra vigila la carta.' },
 					{ t: type === 'final' ? 'INTENTO DEFINITIVO' : ATT_LABEL[type], b: type === 'final' ? 'Este resultado <em>cuenta para el ranking y los premios</em>. Solo hay una oportunidad: si abandonan o cierran el juego, el intento se pierde.' : (type === 'practice' ? 'Este intento <em>no suma puntos</em>. Al terminar podrán hacer una segunda práctica o pasar al definitivo.' : 'Es su <em>última práctica</em> y no suma puntos. Después solo queda el intento definitivo.') }];
 			}
