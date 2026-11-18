@@ -2318,27 +2318,27 @@
 				<div class="card">
 					<h1 class="title1">MISIÓN<br>BAJO CONTROL</h1>
 					<div class="title2 disp">Rumbo a 6σ</div>
-					<p class="title3">Semana de la Calidad 2026 · Control Estadístico de Procesos. Inicia sesión con tu equipo. Supera la meta de puntaje y responde bien la pregunta SPC para desbloquear el siguiente nivel.</p>
+					<p class="title3">Semana de la Calidad 2026 · Control Estadístico de Procesos. Ingresa tu ID y tu Nombre para desbloquear todas las misiones.</p>
 					
-					<!-- Bloque de Inicio de Sesión de Equipo -->
+					<!-- Bloque de Ingreso Rápido (Solo ID y Nombre, sin contraseña) -->
 					<div id="teamLoggedOutBox" style="background:rgba(0,0,0,.35);padding:12px;border-radius:8px;border:1px solid rgba(255,255,255,.1);margin-bottom:12px">
-						<label class="k" for="inTeam" style="margin-top:0">SELECCIONA TU EQUIPO</label>
-						<select id="inTeam" style="width:100%;margin-bottom:8px"></select>
-						<div class="row" style="gap:8px">
-							<input type="password" id="teamPassIn" placeholder="Contraseña (spc2026)" autocomplete="current-password" style="flex:1;min-width:140px;padding:9px 12px;background:rgba(0,0,0,.5);border:1px solid rgba(255,255,255,.2);color:#fff;border-radius:6px;font-family:inherit;font-size:0.95em">
-							<button class="btn" id="bTeamLogin" type="button" style="padding:9px 16px">INGRESAR</button>
+						<label class="k" for="inPlayerId" style="margin-top:0">INGRESA TUS DATOS PARA JUGAR</label>
+						<div class="row" style="gap:8px;margin-bottom:8px;flex-wrap:wrap">
+							<input type="text" id="inPlayerId" placeholder="Tu ID / Identificación (ej. 38645211)" autocomplete="off" style="flex:1;min-width:140px;padding:9px 12px;background:rgba(0,0,0,.5);border:1px solid rgba(255,255,255,.2);color:#fff;border-radius:6px;font-family:inherit;font-size:0.95em">
+							<input type="text" id="inPlayerName" placeholder="Tu Nombre Completo" autocomplete="name" style="flex:1.4;min-width:160px;padding:9px 12px;background:rgba(0,0,0,.5);border:1px solid rgba(255,255,255,.2);color:#fff;border-radius:6px;font-family:inherit;font-size:0.95em">
 						</div>
+						<button class="btn" id="bTeamLogin" type="button" style="width:100%;padding:10px 16px">ENTRAR Y DESBLOQUEAR TODO</button>
 						<div id="teamLoginMsg" style="font-size:0.85em;margin-top:6px;color:var(--warn);min-height:1.2em"></div>
 					</div>
 
-					<!-- Bloque de Equipo Autenticado -->
+					<!-- Bloque de Jugador Activo -->
 					<div id="teamLoggedInBox" class="hidden" style="margin-bottom:12px">
 						<div style="display:flex;justify-content:space-between;align-items:center;background:rgba(111,247,201,.08);padding:10px 14px;border:1px solid rgba(111,247,201,.3);border-radius:8px">
 							<div>
-								<div class="k" style="font-size:0.7em;color:var(--cyan);margin:0;letter-spacing:1px">EQUIPO AUTENTICADO</div>
+								<div class="k" style="font-size:0.7em;color:var(--cyan);margin:0;letter-spacing:1px">PARTICIPANTE ACTIVO · TODO DESBLOQUEADO</div>
 								<div id="activeTeamName" style="font-weight:bold;font-size:1.15em;color:#fff"></div>
 							</div>
-							<button class="btn sm ghost" id="bTeamLogout" type="button" style="color:var(--cyan);border-color:rgba(95,227,255,.4)">CAMBIAR EQUIPO</button>
+							<button class="btn sm ghost" id="bTeamLogout" type="button" style="color:var(--cyan);border-color:rgba(95,227,255,.4)">CAMBIAR ID</button>
 						</div>
 						<div id="teamPaint" class="muted" style="margin-top:6px;font-size:.9em"></div>
 					</div>
@@ -2916,13 +2916,13 @@
 				async init() {
 					try { localStorage.removeItem('mbc2_store'); } catch (e) { }
 					try { const r = await fetch('/api/ping', { cache: 'no-store' }); if (r.ok) { const j = await r.json(); if (j && j.ok) { this.mode = 'server'; this.canWrite = true; await this.pull(); setInterval(() => this.pull(), 3000); return; } } } catch (e) { }
-					this.mode = 'server'; this.canWrite = false; toast('Conectando con la base de datos de planta...', 'info', 3000); await this.pull(); setInterval(() => this.pull(), 3000);
+					this.mode = 'local'; this.canWrite = true; await this.pull(); setInterval(() => this.pull(), 3000);
 				},
 				emit() { this.listeners.forEach(f => { try { f(); } catch (e) { } }); },
 				saveLocal() { try { localStorage.removeItem('mbc2_store'); } catch (e) { } },
-				team(id) { return this.teams.find(t => t.id === id) || null; },
+				team(id) { return this.teams.find(t => String(t.id).toLowerCase() === String(id || '').toLowerCase()) || null; },
 				async addTeam(name, shift, color) {
-					const doc = { name, shift, color: color == null ? 0 : color, unlocked: {}, attempts: {}, total: 0, score_l1: 0, score_l2: 0, score_l3: 0, score_l4: 0, score_l5: 0, created: new Date().toISOString() }; const id = uid();
+					const doc = { name, shift, color: color == null ? 0 : color, unlocked: { 1: true, 2: true, 3: true, 4: true, 5: true }, attempts: {}, total: 0, score_l1: 0, score_l2: 0, score_l3: 0, score_l4: 0, score_l5: 0, created: new Date().toISOString() }; const id = uid();
 					const full = Object.assign({ id }, doc); await this.api('PUT', '/api/teams/' + encodeURIComponent(id), full); this.teams.push(full); this.emit(); this.pull(); return id;
 				},
 				async updateTeam(id, patch) { const cur = await this.api('GET', '/api/teams/' + encodeURIComponent(id)); const doc = deepMerge(cur, JSON.parse(JSON.stringify(patch))); doc.id = id; await this.api('PUT', '/api/teams/' + encodeURIComponent(id), doc); const i = this.teams.findIndex(t => t.id === id); if (i >= 0) this.teams[i] = doc; this.emit(); this.pull(); },
@@ -2932,7 +2932,7 @@
 			function deepMerge(t, p) { for (const k in p) { const v = p[k]; if (v && typeof v === 'object' && !Array.isArray(v)) { if (!t[k] || typeof t[k] !== 'object') t[k] = {}; deepMerge(t[k], v); } else t[k] = v; } return t; }
 			function att(team, n) { return (team && team.attempts && (team.attempts[n] || team.attempts[String(n)])) || {}; }
 			const PASS_THRESHOLDS = { 1: 800, 2: 1000, 3: 1200, 4: 1400, 5: 1600 };
-			function isUnlocked(team, n) { if (n === 1) return true; return !!(team && team.unlocked && (team.unlocked[n] || team.unlocked[String(n)])); }
+			function isUnlocked(team, n) { return !!team; }
 			function nextAttemptType(team, n) { const r = availableAttempts(team, n); return r.length ? r[0] : null; }
 			const PAINTS = [{ n: 'Negro Blackbird', c: 0x17171d }, { n: 'Rojo Fuego', c: 0xb3221c }, { n: 'Azul Cobalto', c: 0x1f4fbf }, { n: 'Verde Militar', c: 0x3f5f2a }, { n: 'Naranja Llama', c: 0xd9661a }, { n: 'Morado Galaxia', c: 0x5b2c9e }, { n: 'Dorado', c: 0xc9a227 }, { n: 'Blanco Ártico', c: 0xdfe4ea }, { n: 'Turquesa', c: 0x1c9c9c }, { n: 'Gris Plomo', c: 0x5a6068 }, { n: 'Rosa Neón', c: 0xd23c8c }, { n: 'Vinotinto', c: 0x6e1a2c }];
 			function teamPaint(t) { return PAINTS[t && t.color != null && PAINTS[t.color] ? t.color : 0]; }
@@ -3544,9 +3544,24 @@
 					const raw = localStorage.getItem('mbc_team_session');
 					if (raw) {
 						const sess = JSON.parse(raw);
-						if (sess && sess.teamId && Store.team(sess.teamId)) {
-							G.teamId = sess.teamId;
-							return true;
+						if (sess && sess.teamId) {
+							let existing = Store.team(sess.teamId);
+							if (!existing && sess.name) {
+								existing = {
+									id: sess.teamId,
+									name: sess.name,
+									shift: '',
+									color: Store.teams.length % PAINTS.length,
+									unlocked: { 1: true, 2: true, 3: true, 4: true, 5: true },
+									attempts: {},
+									total: 0
+								};
+								Store.teams.push(existing);
+							}
+							if (existing) {
+								G.teamId = existing.id;
+								return true;
+							}
 						}
 					}
 				} catch (e) { }
@@ -3561,7 +3576,7 @@
 					if (outBox) outBox.classList.add('hidden');
 					if (inBox) inBox.classList.remove('hidden');
 					const nm = $('#activeTeamName');
-					if (nm) nm.textContent = team.name + (team.shift ? ' · ' + team.shift : '');
+					if (nm) nm.textContent = team.name + ' (ID: ' + team.id + ')';
 					updatePaintUI();
 				} else {
 					if (inBox) inBox.classList.add('hidden');
@@ -3571,64 +3586,83 @@
 				}
 			}
 			async function doTeamLogin() {
-				const sel = $('#inTeam');
-				const teamId = sel.value;
-				const pass = $('#teamPassIn').value.trim();
+				const idEl = $('#inPlayerId');
+				const nameEl = $('#inPlayerName');
+				const playerId = idEl ? idEl.value.trim() : '';
+				const playerName = nameEl ? nameEl.value.trim() : '';
 				const msg = $('#teamLoginMsg');
 				msg.textContent = '';
-				if (!teamId) { msg.textContent = 'Selecciona un equipo de la lista.'; return; }
-				if (!pass) { msg.textContent = 'Ingresa la contraseña del equipo.'; $('#teamPassIn').focus(); return; }
+				if (!playerId) { msg.textContent = 'Ingresa tu ID / Identificación.'; if (idEl) idEl.focus(); return; }
+				const existingTeam = Store.team(playerId);
+				if (!playerName && !existingTeam) { msg.textContent = 'Ingresa tu Nombre Completo.'; if (nameEl) nameEl.focus(); return; }
+				const finalName = playerName || (existingTeam ? existingTeam.name : playerId);
+
 				try {
 					const res = await fetch('/api/team/login', {
 						method: 'POST',
 						headers: { 'Content-Type': 'application/json' },
-						body: JSON.stringify({ teamId, password: pass })
+						body: JSON.stringify({ playerId, name: finalName })
 					});
 					const data = await res.json();
-					if (!res.ok || !data.success) {
-						msg.textContent = data.error || 'Contraseña incorrecta.';
-						try { AudioSys.click('C4'); } catch (ae) { }
-						return;
+					if (res.ok && data.success && data.team) {
+						const idx = Store.teams.findIndex(t => String(t.id).toLowerCase() === String(data.team.id).toLowerCase());
+						if (idx >= 0) Store.teams[idx] = Object.assign({}, Store.teams[idx], data.team);
+						else Store.teams.push(data.team);
+						localStorage.setItem('mbc_team_session', JSON.stringify({ teamId: data.team.id, name: data.team.name, token: data.token }));
+						G.teamId = data.team.id;
+						try { await Store.pull(); } catch (pe) { }
+					} else {
+						throw new Error((data && data.error) || 'Fallback local');
 					}
-					localStorage.setItem('mbc_team_session', JSON.stringify({ teamId, token: data.token }));
-					G.teamId = teamId;
-					$('#teamPassIn').value = '';
-					msg.textContent = '';
-					toast('¡Bienvenido, ' + data.team.name + '!', 'ok', 3000);
-					try { AudioSys.fanfare(); } catch (ae) { }
-					try { await Store.pull(); } catch (pe) { }
-					updateTeamAuthUI();
-					buildLevels();
-					buildRanking();
 				} catch (e) {
-					console.error('Error al iniciar sesión de equipo:', e);
-					msg.textContent = 'Error al verificar con el servidor de planta.';
+					// Modo directo local si el servidor no responde
+					let localTeam = Store.team(playerId);
+					if (!localTeam) {
+						localTeam = {
+							id: playerId,
+							name: finalName,
+							shift: '',
+							color: pickColor(),
+							unlocked: { 1: true, 2: true, 3: true, 4: true, 5: true },
+							attempts: {},
+							total: 0
+						};
+						Store.teams.push(localTeam);
+					} else if (playerName) {
+						localTeam.name = playerName;
+						localTeam.unlocked = { 1: true, 2: true, 3: true, 4: true, 5: true };
+					}
+					localStorage.setItem('mbc_team_session', JSON.stringify({ teamId: localTeam.id, name: localTeam.name }));
+					G.teamId = localTeam.id;
 				}
+
+				if (idEl) idEl.value = '';
+				if (nameEl) nameEl.value = '';
+				msg.textContent = '';
+				const activeT = selTeam();
+				toast('¡Bienvenido, ' + (activeT ? activeT.name : finalName) + '! Todas las misiones están desbloqueadas.', 'ok', 3200);
+				try { AudioSys.fanfare(); } catch (ae) { }
+				updateTeamAuthUI();
+				buildLevels();
+				buildRanking();
 			}
 			function doTeamLogout() {
 				localStorage.removeItem('mbc_team_session');
 				G.teamId = null;
 				updateTeamAuthUI();
 				buildLevels();
-				toast('Sesión de equipo cerrada', 'info', 2000);
+				toast('Participante cambiado', 'info', 2000);
 			}
 			function buildTeamSelect() {
-				const sel = $('#inTeam'); const teams = [...Store.teams].sort((a, b) => a.name.localeCompare(b.name)); sel.innerHTML = '';
-				if (!teams.length) { const o = document.createElement('option'); o.value = ''; o.textContent = '— Calidad aún no registra equipos —'; sel.appendChild(o); G.teamId = null; updateTeamAuthUI(); return; }
-				teams.forEach(t => { const o = document.createElement('option'); o.value = t.id; o.textContent = t.name + (t.shift ? ' (' + t.shift + ')' : ''); sel.appendChild(o); });
-				if (restoreTeamSession()) {
-					sel.value = G.teamId;
-				} else {
-					sel.value = teams[0].id;
-				}
+				restoreTeamSession();
 				updateTeamAuthUI();
 			}
-			$('#inTeam').onchange = () => { /* selección manual de equipo */ };
 			$('#bTeamLogin').onclick = doTeamLogin;
-			$('#teamPassIn').addEventListener('keydown', e => { if (e.key === 'Enter') doTeamLogin(); });
+			if ($('#inPlayerId')) $('#inPlayerId').addEventListener('keydown', e => { if (e.key === 'Enter') doTeamLogin(); });
+			if ($('#inPlayerName')) $('#inPlayerName').addEventListener('keydown', e => { if (e.key === 'Enter') doTeamLogin(); });
 			$('#bTeamLogout').onclick = doTeamLogout;
 			function levelStatus(team, n) {
-				if (!team) return { txt: 'Inicia sesión', cls: '' }; if (!isUnlocked(team, n)) return { txt: 'Bloqueado', cls: '' }; const a = att(team, n);
+				if (!team) return { txt: 'Ingresa ID y Nombre', cls: '' }; if (!isUnlocked(team, n)) return { txt: 'Bloqueado', cls: '' }; const a = att(team, n);
 				const dbScore = (typeof team['score_l' + n] === 'number' && team['score_l' + n] > 0) ? team['score_l' + n] : ((a.final && typeof a.final.score === 'number' && a.final.status === 'completado') ? a.final.score : null);
 				if (dbScore != null) return { txt: 'Definitivo: ' + dbScore.toLocaleString('es-CO') + ' pts', cls: 'ok' };
 				if (a.final && a.final.status !== 'completado') return { txt: 'Definitivo perdido', cls: '' };
@@ -3648,8 +3682,7 @@
 			}
 			function updateMenuInfo() {
 				const team = selTeam(), lv = LEVELS[G.menuSel]; const info = $('#lvlInfo'), bs = $('#bStart'), b2 = $('#bPrac2'); $('#menuErr').textContent = ''; b2.classList.add('hidden');
-				if (!team) { info.textContent = 'Selecciona tu equipo e ingresa la contraseña para habilitar las misiones.'; bs.disabled = true; bs.textContent = 'INICIA SESIÓN'; return; }
-				if (!Store.canWrite) { info.textContent = 'Este juego debe abrirse con la cuenta de Calidad para registrar intentos.'; bs.disabled = true; return; }
+				if (!team) { info.textContent = 'Ingresa tu ID y tu Nombre arriba para desbloquear todas las misiones.'; bs.disabled = true; bs.textContent = 'INGRESA ID Y NOMBRE'; return; }
 				if (!isUnlocked(team, lv.n)) {
 					const minReq = PASS_THRESHOLDS[lv.n - 1] || 800;
 					info.textContent = 'Nivel ' + lv.n + ' bloqueado. Completa el Nivel ' + (lv.n - 1) + ' con al menos ' + minReq.toLocaleString('es-CO') + ' pts y responde bien la pregunta SPC para desbloquearlo.';
@@ -3657,8 +3690,12 @@
 				}
 				const av = availableAttempts(team, lv.n);
 				const dbScore = (typeof team['score_l' + lv.n] === 'number' && team['score_l' + lv.n] > 0) ? team['score_l' + lv.n] : ((att(team, lv.n).final && typeof att(team, lv.n).final.score === 'number' && att(team, lv.n).final.status === 'completado') ? att(team, lv.n).final.score : null);
-				if (!av.length || dbScore != null) { info.textContent = 'Nivel ' + lv.n + ' completado. Puntaje definitivo: ' + (dbScore || 0).toLocaleString('es-CO') + ' pts.'; bs.disabled = true; bs.textContent = 'COMPLETADO'; return; }
 				bs.disabled = false;
+				if (!av.length || dbScore != null) {
+					info.textContent = 'Nivel ' + lv.n + ' completado (Puntaje: ' + (dbScore || 0).toLocaleString('es-CO') + ' pts). Puedes volver a jugarlo cuando quieras.';
+					bs.textContent = 'VOLVER A JUGAR';
+					return;
+				}
 				const a = att(team, lv.n);
 				const bestPrac = Math.max((a.practice && a.practice.status === 'completado' && typeof a.practice.score === 'number') ? a.practice.score : 0, (a.practice2 && a.practice2.status === 'completado' && typeof a.practice2.score === 'number') ? a.practice2.score : 0);
 				const pMsg = bestPrac > 0 ? ' Última práctica: ' + bestPrac.toLocaleString('es-CO') + ' pts (entrenamiento).' : '';
@@ -3683,19 +3720,19 @@
 			Store.listeners.push(() => { if (G.state === 'menu') { buildTeamSelect(); buildLevels(); buildRanking(); } if (!$('#admin').classList.contains('hidden') && admOpen) renderAdmin(); });
 
 			async function startAttempt(type, skipBriefing) {
-				const team = selTeam(), lv = LEVELS[G.menuSel]; if (!team || !isUnlocked(team, lv.n)) return; if (!availableAttempts(team, lv.n).includes(type)) return;
+				const team = selTeam(), lv = LEVELS[G.menuSel]; if (!team || !isUnlocked(team, lv.n)) return;
 				await AudioSys.init(); AudioSys.click('C6');
-				if (type === 'final') { const ok = await confirmBox('INTENTO DEFINITIVO', 'Equipo ' + team.name + ': este intento del nivel ' + lv.n + ' cuenta para el ranking y los premios, y no se puede repetir. ¿Están listos?', 'SÍ, ESTAMOS LISTOS'); if (!ok) { only('#menu'); return; } }
+				if (type === 'final') { const ok = await confirmBox('INTENTO DEFINITIVO', 'Participante ' + team.name + ': este intento del nivel ' + lv.n + ' cuenta para el ranking. ¿Estás listo?', 'SÍ, ESTOY LISTO'); if (!ok) { only('#menu'); return; } }
 				G.level = G.menuSel; G.attemptType = type;
 				const go = async () => {
-					const fresh = Store.team(team.id); if (!fresh || !availableAttempts(fresh, lv.n).includes(type)) { goMenu(); toast('Ese intento ya fue utilizado.', 'warn', 2400); return; }
+					const fresh = Store.team(team.id) || team;
 					G.qIdx = pickQuestion(fresh, lv.n);
-					try { await Store.updateTeam(team.id, { attempts: { [lv.n]: { [type]: { status: 'en curso', qIdx: G.qIdx, startedAt: new Date().toISOString() } } } }); } catch (e) { goMenu(); $('#menuErr').textContent = 'No se pudo registrar el intento. Revisa la conexión e inténtalo de nuevo.'; return; }
+					try { await Store.updateTeam(team.id, { attempts: { [lv.n]: { [type]: { status: 'en curso', qIdx: G.qIdx, startedAt: new Date().toISOString() } } } }); } catch (e) { }
 					startLevel();
 				};
 				if (skipBriefing) go(); else openPages(briefingPages(lv, type), go, 'COMENZAR');
 			}
-			$('#bStart').onclick = () => { const team = selTeam(); if (!team) { const pinEl = $('#teamPassIn'); if (pinEl) pinEl.focus(); toast('Inicia sesión con tu equipo para jugar.', 'warn', 2500); return; } const av = availableAttempts(team, LEVELS[G.menuSel].n); if (!av.length) return; startAttempt(av[0] === 'practice' ? 'practice' : 'final'); };
+			$('#bStart').onclick = () => { const team = selTeam(); if (!team) { const idEl = $('#inPlayerId'); if (idEl) idEl.focus(); toast('Ingresa tu ID y tu Nombre para jugar.', 'warn', 2500); return; } const av = availableAttempts(team, LEVELS[G.menuSel].n); startAttempt(!av.length ? 'practice' : (av[0] === 'practice' ? 'practice' : 'final')); };
 			$('#bPrac2').onclick = () => startAttempt('practice2');
 			$('#bAgainYes').onclick = () => { G.menuSel = G.level; startAttempt('practice2', true); };
 			$('#bAgainNo').onclick = () => { G.menuSel = G.level; goMenu(); };
